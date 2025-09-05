@@ -1,5 +1,7 @@
 import Foundation
 import RAW
+import RAW_blake2
+public typealias WGHasher<K> = RAW_blake2.Hasher<S, K> where K:RAW_staticbuff
 
 let ID_SIZE:Int = 32
 let FINGERPRINT_SIZE:Int = 16
@@ -17,8 +19,25 @@ public struct ID: Sendable, Equatable, Comparable {}
 @RAW_staticbuff_fixedwidthinteger_type<UInt64>(bigEndian: true)
 public struct TimeStamp: Sendable, Equatable, Comparable {}
 
+protocol StorageItem: Sendable, Equatable, Comparable
+where StoredIdType: RAW_staticbuff, StoredIdType:Equatable, StoredIdType:Comparable, StoredIdType.RAW_staticbuff_storetype == ID.RAW_staticbuff_storetype,
+	  StoredTimeStampType: RAW_staticbuff, StoredTimeStampType: Equatable, StoredTimeStampType: Comparable, StoredTimeStampType.RAW_staticbuff_storetype == TimeStamp.RAW_staticbuff_storetype {
+	
+	associatedtype StoredIdType
+	associatedtype StoredTimeStampType
+	
+	init(timestamp: UInt64)
+	
+	init(timestamp: UInt64, id: ID) throws
+	
+	func getId() -> [UInt8]
+}
+
 @RAW_staticbuff(concat: ID.self, TimeStamp.self)
-public struct Item:Sendable, Equatable, Comparable {
+public struct Item:Sendable, StorageItem {
+	typealias StoredIdType = ID
+	typealias StoredTimeStampType = TimeStamp
+	
 	var id:ID
 	let timestamp:TimeStamp
 	

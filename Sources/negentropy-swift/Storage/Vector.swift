@@ -1,6 +1,5 @@
 import RAW
 import RAW_blake2
-public typealias WGHasher<K> = RAW_blake2.Hasher<S, K> where K:RAW_staticbuff
 
 struct VectorStorage: StorageBase {
 	public private(set) var items: [Item] = []

@@ -2,6 +2,7 @@ let MAX_U64: UInt64 = UInt64.max
 
 struct Negentropy<StorageImpl:StorageBase> {
 	var storage:StorageImpl
+//	typealias sItem = StorageImpl.Item
 	var frameSizeLimit: UInt64
 	
 	var isInitiator = false
