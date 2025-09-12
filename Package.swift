@@ -16,7 +16,8 @@ let package = Package(
     ],
 	dependencies:[
 		.package(url:"https://github.com/tannerdsilva/rawdog.git", revision:"b249e367e35c0ea05ae7b7dc0046074b5b05c604"),
-		.package(url:"https://github.com/tannerdsilva/QuickLMDB.git", from: "13.0.0")
+		.package(url:"https://github.com/tannerdsilva/QuickLMDB.git", from: "13.0.0"),
+		.package(url:"https://github.com/tannerdsilva/bedrock.git", revision:"b6626ac8ecee31975093e01427e10f4cc299409a")
 	],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -25,11 +26,13 @@ let package = Package(
             name: "negentropy-swift",
 			dependencies: [.product(name:"RAW", package:"rawdog"),
 						   .product(name:"RAW_blake2", package:"rawdog"),
-						   .product(name:"QuickLMDB", package:"QuickLMDB")]
+						   .product(name:"QuickLMDB", package:"QuickLMDB"),
+						   .product(name:"bedrock", package:"bedrock")]
 		),
         .testTarget(
             name: "negentropy-swiftTests",
-            dependencies: ["negentropy-swift"]
+            dependencies: ["negentropy-swift",
+						   .product(name:"bedrock", package:"bedrock")]
         ),
     ]
 )

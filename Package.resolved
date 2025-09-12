@@ -1,6 +1,14 @@
 {
-  "originHash" : "50ed0e33f822561dd72d346e6e83077e03e52a453cbfb6681ae534305c42a2e1",
+  "originHash" : "963c2e51f5865d9d9ba254ea9bd9df6e5c3ce846698d5a8cb36bd0efab46a364",
   "pins" : [
+    {
+      "identity" : "bedrock",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tannerdsilva/bedrock.git",
+      "state" : {
+        "revision" : "b6626ac8ecee31975093e01427e10f4cc299409a"
+      }
+    },
     {
       "identity" : "clmdb",
       "kind" : "remoteSourceControl",

@@ -1,8 +1,55 @@
+import QuickLMDB
+
 let MAX_U64: UInt64 = UInt64.max
 
-struct Negentropy<StorageImpl:StorageBase> {
-	var storage:StorageImpl
-//	typealias sItem = StorageImpl.Item
+struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.MDB_db_key_type: StorageItem {
+	
+	// Bound for checking against items
+	public struct Bound: Equatable, Comparable {
+		public var item:Index
+		public var idLen:Int
+		
+		/// `Bound(timestamp:idSlice:)`
+		init(timestamp:TimeStamp = TimeStamp(RAW_native: 0), idSlice:[UInt8] = []) throws {
+			let suppliedLen = idSlice.count
+			guard suppliedLen <= ID_SIZE else {
+				throw NegentropyError.badIDSize
+			}
+			
+			self.idLen = idSlice.count
+			self.item = Index(timestamp: timestamp.RAW_native())
+			
+			self.item.RAW_access_mutating({ myStructBuff in
+				for i in 0..<idSlice.count {
+					myStructBuff[i] = idSlice[i]
+				}
+			})
+			
+		}
+		
+		/// `Bound(item:)`
+		init(item: Index) {
+			var constructedItem: Index? = nil
+			try! item.id.RAW_access_staticbuff({ myStructBuff in
+				constructedItem = try Index(timestamp: 0, id: Index.StoredIdType(RAW_staticbuff: myStructBuff))
+			})
+			self.item = constructedItem!
+			self.idLen = ID_SIZE
+		}
+		
+		static public func == (lhs: Bound, rhs: Bound) -> Bool {
+			lhs.item == rhs.item
+		}
+
+		static public func < (lhs: Bound, rhs: Bound) -> Bool {
+			lhs.item < rhs.item
+		}
+	}
+	
+	typealias Index = DatabaseType.MDB_db_key_type
+	typealias ID = DatabaseType.MDB_db_key_type.StoredIdType
+	
+	var storage: DatabaseType
 	var frameSizeLimit: UInt64
 	
 	var isInitiator = false
@@ -10,7 +57,7 @@ struct Negentropy<StorageImpl:StorageBase> {
 	var lastTimestampIn:TimeStamp = TimeStamp(RAW_staticbuff: TimeStamp.RAW_staticbuff_zeroed())
 	var lastTimestampOut:TimeStamp = TimeStamp(RAW_staticbuff: TimeStamp.RAW_staticbuff_zeroed())
 	
-	init(storage: StorageImpl, frameSizeLimit: UInt64 = 0) throws {
+	init(storage: DatabaseType, frameSizeLimit: UInt64 = 0) throws {
 		if frameSizeLimit != 0 && frameSizeLimit < 4096 {
 			throw NegentropyError.frameSizeTooSmall
 		}
@@ -27,7 +74,7 @@ struct Negentropy<StorageImpl:StorageBase> {
 		var output:[UInt8] = []
 		let ts = TimeStamp(RAW_native: MAX_U64)
 		var bound = try Bound(timestamp: ts)
-		output += try splitRange(lower: 0, upper: storage.size(), upperBound: &bound)
+		output += try splitRange(lower: storage.first(), upper: storage.last(), upperBound: &bound)
 		
 		return output
 	}
@@ -71,29 +118,28 @@ struct Negentropy<StorageImpl:StorageBase> {
 		
 		var fullOutput:[UInt8] = []
 		
-		let storageSize = storage.size()
-		var prevBound:Bound = try Bound()
-		var prevIndex:Int = 0
+		let storageSize = try storage.size()
+		var prevBound = try Bound()
+		var prevIndex:Index = try storage.first()
 		var skip:Bool = false
+		let end = try storage.last()
 		
 		while (query.count != 0) {
 			// Temporary output for this iteration
 			var o:[UInt8] = []
 			
-	
-			
 			var currBound = try decodeBound(encoded: &query)
 			let mode = try Mode(rawValue: Int(decodeVarInt(&query)))
 			
 			let lower = prevIndex
-			var upper = storage.findLowerBound(begin: prevIndex, end: Int(storageSize), value: currBound)
+			var upper = try storage.findLowerBound(begin: prevIndex, end: end, value: currBound.item)
 			
 			switch mode {
 				case .skip:
 					skip = true
 				case .fingerprint:
 					let theirFingerprint = try getBytes(&query, 16)
-					let ourFingerprint = storage.fingerprint(begin: lower, end: upper)
+					let ourFingerprint = try storage.fingerprint(begin: lower, end: upper)
 					
 					try ourFingerprint.RAW_access { ptr in
 						if(theirFingerprint != Array(UnsafeBufferPointer(start: ptr.baseAddress!, count: ptr.count))) {
@@ -118,7 +164,7 @@ struct Negentropy<StorageImpl:StorageBase> {
 					if(isInitiator) {
 						skip = true
 						
-						storage.iterate(begin: lower, end: upper, cb: { item, _ in
+						try storage.iterate(begin: lower, end: upper, cb: { item in
 							let k = item.id
 							
 							if let index = theirElems.firstIndex(of: k) {
@@ -141,10 +187,10 @@ struct Negentropy<StorageImpl:StorageBase> {
 						
 						var endBound = currBound
 						
-						storage.iterate(begin: lower, end: upper, cb: { item, index in
+						try storage.iterate(begin: lower, end: upper, cb: { item in
 							if(exceededFrameSizeLimit(fullOutput.count + responseIds.count)) {
 								endBound = Bound(item: item)
-								upper = index
+								upper = item
 								return
 							}
 							responseIds += item.getId()
@@ -165,7 +211,7 @@ struct Negentropy<StorageImpl:StorageBase> {
 			}
 			
 			if(exceededFrameSizeLimit(fullOutput.count + o.count)) {
-				let remainingFingerprint = storage.fingerprint(begin: upper, end: Int(storageSize))
+				let remainingFingerprint = try storage.fingerprint(begin: upper, end: end)
 				let ts = TimeStamp(RAW_native: MAX_U64)
 				
 				fullOutput += try encodeBound(Bound(timestamp: ts))
@@ -189,10 +235,10 @@ struct Negentropy<StorageImpl:StorageBase> {
 		return frameSizeLimit != 0 && size > frameSizeLimit - 200
 	}
 	
-	private mutating func splitRange(lower:Int, upper:Int, upperBound: inout Bound) throws -> [UInt8] {
+	private mutating func splitRange(lower:Index, upper:Index, upperBound: inout Bound) throws -> [UInt8] {
 		var ret:[UInt8] = []
 		
-		let numElements:Int = upper - lower
+		let numElements:Int = try storage.numElements(begin: lower, end: upper)
 		let buckets = 16
 		
 		if(numElements < buckets * 2) {
@@ -201,7 +247,7 @@ struct Negentropy<StorageImpl:StorageBase> {
 			
 			ret += encodeVarInt(numElements)
 			
-			storage.iterate(begin: lower, end: upper, cb: { item, len in
+			try storage.iterate(begin: lower, end: upper, cb: { item in
 				item.id.RAW_access({ptr in
 					ret += Array(UnsafeBufferPointer(start: ptr.baseAddress!, count: ptr.count))
 				})
@@ -213,21 +259,18 @@ struct Negentropy<StorageImpl:StorageBase> {
 			
 			for i in 0..<buckets {
 				let bucketSize = itemsPerBucket + (i < bucketsWithExtra ? 1 : 0)
-				let ourFingerprint = storage.fingerprint(begin: curr, end: curr + bucketSize)
-				curr += bucketSize
+				let shifted = try! storage.shift(curr: curr, amount: bucketSize)
+				let ourFingerprint = try storage.fingerprint(begin: curr, end: shifted)
+				curr = shifted
 				
 				var nextBound:Bound
 				
 				if(curr == upper) {
 					nextBound = upperBound
 				} else {
-					var prevItem:Item = Item()
-					var currItem:Item = Item()
-					
-					storage.iterate(begin: curr - 1, end: curr + 1, cb: { item, index in
-						if(index == curr - 1) { prevItem = item }
-						else { currItem = item }
-					})
+					let currItem = curr
+					let prevItem = try storage.prev(curr: currItem)
+
 					nextBound = try getMinimalBound(prev: prevItem, curr: currItem)
 				}
 				
@@ -277,7 +320,10 @@ struct Negentropy<StorageImpl:StorageBase> {
 	
 	mutating func encodeBound(_ b:Bound) -> [UInt8] {
 		var ret:[UInt8] = []
-		ret += encodeTimestampOut(timestamp: b.item.timestamp)
+		let time = b.item.timestamp.RAW_access_staticbuff { ptr in
+			return TimeStamp(RAW_staticbuff: ptr)
+		}
+		ret += encodeTimestampOut(timestamp: time)
 		ret += encodeVarInt(b.idLen)
 		b.item.id.RAW_access { ptr in
 			ret += Array(UnsafeBufferPointer(start: ptr.baseAddress!, count: Int(b.idLen)))
@@ -285,9 +331,12 @@ struct Negentropy<StorageImpl:StorageBase> {
 		return ret
 	}
 	
-	private func getMinimalBound(prev:Item, curr:Item) throws -> Bound{
+	private func getMinimalBound(prev:Index, curr:Index) throws -> Bound{
+		let ts = curr.timestamp.RAW_access_staticbuff { ptr in
+			return TimeStamp(RAW_staticbuff: ptr)
+		}
 		if(curr.timestamp != prev.timestamp) {
-			return try Bound(timestamp: curr.timestamp)
+			return try Bound(timestamp: ts)
 		} else {
 			var sharedPrefixBytes:Int = 0
 			let currKey = curr.id
@@ -305,7 +354,7 @@ struct Negentropy<StorageImpl:StorageBase> {
 			}
 			
 			return try currKey.RAW_access { ptr in
-				return try Bound(timestamp: curr.timestamp, idSlice: Array(UnsafeBufferPointer(start: ptr.baseAddress!, count: sharedPrefixBytes + 1)))
+				return try Bound(timestamp: ts, idSlice: Array(UnsafeBufferPointer(start: ptr.baseAddress!, count: sharedPrefixBytes + 1)))
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 import Foundation
 import RAW
 import RAW_blake2
+import QuickLMDB
 public typealias WGHasher<K> = RAW_blake2.Hasher<S, K> where K:RAW_staticbuff
 
 let ID_SIZE:Int = 32
@@ -19,26 +20,53 @@ public struct ID: Sendable, Equatable, Comparable {}
 @RAW_staticbuff_fixedwidthinteger_type<UInt64>(bigEndian: true)
 public struct TimeStamp: Sendable, Equatable, Comparable {}
 
-protocol StorageItem: Sendable, Equatable, Comparable
+protocol StorageItem: Sendable, Equatable, Comparable, MDB_comparable
 where StoredIdType: RAW_staticbuff, StoredIdType:Equatable, StoredIdType:Comparable, StoredIdType.RAW_staticbuff_storetype == ID.RAW_staticbuff_storetype,
 	  StoredTimeStampType: RAW_staticbuff, StoredTimeStampType: Equatable, StoredTimeStampType: Comparable, StoredTimeStampType.RAW_staticbuff_storetype == TimeStamp.RAW_staticbuff_storetype {
 	
 	associatedtype StoredIdType
 	associatedtype StoredTimeStampType
+	var id:StoredIdType { get }
+	var timestamp:StoredTimeStampType { get }
 	
 	init(timestamp: UInt64)
 	
-	init(timestamp: UInt64, id: ID) throws
+	init(timestamp: UInt64, id: StoredIdType) throws
 	
 	func getId() -> [UInt8]
 }
 
 @RAW_staticbuff(concat: ID.self, TimeStamp.self)
 public struct Item:Sendable, StorageItem {
+	public static let MDB_compare_f:MDB_compare_ftype = { a, b in
+		guard let a, let b else { return 0 }
+		
+		let ida = ID(RAW_staticbuff: a.pointee.mv_data)
+		let tsa = TimeStamp(RAW_staticbuff: a.pointee.mv_data.advanced(by: 32))
+		
+		let idb = ID(RAW_staticbuff: b.pointee.mv_data)
+		let tsb = TimeStamp(RAW_staticbuff: b.pointee.mv_data.advanced(by: 32))
+		
+		if(tsa != tsb) {
+			if(tsa < tsb) {
+				return -1
+			} else {
+				return 1
+			}
+		} else {
+			if(ida < idb) {
+				return -1
+			} else if (ida > idb) {
+				return 1
+			}
+		}
+		return 0
+	}
+	
 	typealias StoredIdType = ID
 	typealias StoredTimeStampType = TimeStamp
 	
-	var id:ID
+	let id:ID
 	let timestamp:TimeStamp
 	
 	
@@ -76,48 +104,6 @@ public struct Item:Sendable, StorageItem {
 	}
 }
 
-// Bound for checking against items
-public struct Bound: Equatable, Comparable {
-	public var item:Item
-	public var idLen:Int
-	
-	/// `Bound(timestamp:idSlice:)`
-	init(timestamp:TimeStamp = TimeStamp(RAW_native: 0), idSlice:[UInt8] = []) throws {
-		let suppliedLen = idSlice.count
-		guard suppliedLen <= ID_SIZE else {
-			throw NegentropyError.badIDSize
-		}
-		
-		self.idLen = idSlice.count
-		self.item = Item(timestamp: timestamp.RAW_native())
-		
-		self.item.RAW_access_mutating({ myStructBuff in
-			for i in 0..<idSlice.count {
-				myStructBuff[i] = idSlice[i]
-			}
-		})
-		
-	}
-	
-	/// `Bound(item:)`
-	init(item: Item) {
-		var constructedItem: Item? = nil
-		item.RAW_access_staticbuff({ myStructBuff in
-			constructedItem = Item(RAW_staticbuff: myStructBuff)
-		})
-		self.item = constructedItem!
-		self.idLen = ID_SIZE
-	}
-	
-	static public func == (lhs: Bound, rhs: Bound) -> Bool {
-		lhs.item == rhs.item
-	}
-
-	static public func < (lhs: Bound, rhs: Bound) -> Bool {
-		lhs.item < rhs.item
-	}
-}
-
 @RAW_staticbuff(bytes: 16)
-public struct Fingerprint: Sendable { }
+public struct Fingerprint: Sendable, Comparable, Equatable { }
 
