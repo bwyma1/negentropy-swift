@@ -1,4 +1,4 @@
-// swift-tools-version: 6.1
+// swift-tools-version: 6.2
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -16,7 +16,7 @@ let package = Package(
     ],
 	dependencies:[
 		.package(url:"https://github.com/tannerdsilva/rawdog.git", revision:"b249e367e35c0ea05ae7b7dc0046074b5b05c604"),
-		.package(url:"https://github.com/tannerdsilva/QuickLMDB.git", from: "13.0.0"),
+		.package(name: "QuickLMDB", path: "../QuickLMDB"),
 		.package(url:"https://github.com/tannerdsilva/bedrock.git", revision:"b6626ac8ecee31975093e01427e10f4cc299409a")
 	],
     targets: [

@@ -1,5 +1,5 @@
 {
-  "originHash" : "963c2e51f5865d9d9ba254ea9bd9df6e5c3ce846698d5a8cb36bd0efab46a364",
+  "originHash" : "68cf553f75e4226c0cbe0e639b575c3e91a112d865f3e63c71b719b88d17e50e",
   "pins" : [
     {
       "identity" : "bedrock",
@@ -16,15 +16,6 @@
       "state" : {
         "revision" : "4ce5826424f8e65f395efc5b4c611479384722b1",
         "version" : "0.9.30"
-      }
-    },
-    {
-      "identity" : "quicklmdb",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tannerdsilva/QuickLMDB.git",
-      "state" : {
-        "revision" : "8c46410dcb9bb36df2fa63c3cd0f078e3d781f21",
-        "version" : "13.0.0"
       }
     },
     {
@@ -58,8 +49,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-system.git",
       "state" : {
-        "revision" : "890830fff1a577dc83134890c7984020c5f6b43b",
-        "version" : "1.6.2"
+        "revision" : "395a77f0aa927f0ff73941d7ac35f2b46d47c9db",
+        "version" : "1.6.3"
       }
     }
   ],
