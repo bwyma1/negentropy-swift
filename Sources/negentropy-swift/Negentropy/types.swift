@@ -13,12 +13,12 @@ enum Mode: UInt8 {
 	case idList = 2
 }
 
-protocol StorageID: Sendable, Equatable, Comparable, MDB_comparable
+protocol StorageID: Sendable, Equatable, Comparable, MDB_comparable, Hashable
 where Self: RAW_staticbuff, Self:Equatable, Self:Comparable { }
 
 @RAW_staticbuff(bytes: 6)
 @MDB_comparable
-public struct StoredIDExample:StorageID, Sendable { }
+public struct StoredIDExample:StorageID, Sendable, Hashable { }
 
 @RAW_staticbuff(bytes: 16)
 public struct Fingerprint: Sendable, Equatable { }

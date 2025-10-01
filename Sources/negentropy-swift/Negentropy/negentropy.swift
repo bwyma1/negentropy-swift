@@ -81,7 +81,7 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 		var fullOutput:[UInt8] = []
 		
 		var prevBound = (ID(RAW_staticbuff: ID.RAW_staticbuff_zeroed()), MemoryLayout<ID>.size)
-		var prevIndex:ID = try storage.first()
+		var prevIndex:ID? = try storage.first()
 		var skip:Bool = false
 		
 		while (query.count != 0) {
@@ -113,19 +113,19 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 				case .idList:
 					let numIds = try decodeNumElements(&query)
 					
-					var theirElems:[ID] = []
+					var theirSet = Set<ID>()
 					for _ in 0..<numIds {
 						let id = try decodeID(&query)
-						if(isInitiator) { theirElems.append(id) }
+						if(isInitiator) { theirSet.insert(id) }
 					}
 					
 					if(isInitiator) {
 						skip = true
 						
 						try storage.iterate(begin: lower, end: upper, cb: { id in
-							if let index = theirElems.firstIndex(of: id) {
+							if theirSet.contains(id){
 								// ID exists on both sides
-								theirElems.remove(at: index)
+								theirSet.remove(id)
 							} else {
 								// ID exists on our side, but not their side
 								haveIds.append(id)
@@ -133,7 +133,7 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 							return true
 						})
 						
-						for id in theirElems {
+						for id in theirSet {
 							needIds.append(id)
 						}
 					} else {
@@ -187,10 +187,7 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 				fullOutput += o
 			}
 			
-			guard let nextUpper = upper else {
-				break
-			}
-			prevIndex = nextUpper
+			prevIndex = upper
 			prevBound = currBound
 		}
 
@@ -202,7 +199,7 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 		return frameSizeLimit != 0 && size > frameSizeLimit - 200
 	}
 	
-	private mutating func splitRange(lower:ID, upper:ID?, upperBound: (bound:ID, len:Int)) throws -> [UInt8] {
+	private mutating func splitRange(lower:ID?, upper:ID?, upperBound: (bound:ID, len:Int)) throws -> [UInt8] {
 		var ret:[UInt8] = []
 		
 		let numElements:Int = try storage.numElements(begin: lower, end: upper)
@@ -214,16 +211,18 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 			ret += [Mode.idList.rawValue]
 			ret += encodeNumElements(numElements)
 			
-			try storage.iterate(begin: lower, end: upper, cb: { id in
-				id.RAW_access({ptr in
-					ret += Array(UnsafeBufferPointer(start: ptr.baseAddress!, count: ptr.count))
+			if let lower = lower {
+				try storage.iterate(begin: lower, end: upper, cb: { id in
+					id.RAW_access({ptr in
+						ret += Array(UnsafeBufferPointer(start: ptr.baseAddress!, count: ptr.count))
+					})
+					return true
 				})
-				return true
-			})
+			}
 		} else {
 			let idsPerBucket:Int = numElements / buckets
 			let bucketsWithExtra = numElements % buckets
-			var curr:ID = lower
+			var curr:ID = lower!
 			
 			// For each bucket
 			// | Bound (last id this bucket, next bucket first id) | fingerprintMode (1) | Fingerprint |

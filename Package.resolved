@@ -1,12 +1,13 @@
 {
-  "originHash" : "68cf553f75e4226c0cbe0e639b575c3e91a112d865f3e63c71b719b88d17e50e",
+  "originHash" : "37896a4bd3293015f966e3fcba71474cce97aa7e5793399722ee7b3ac1269d76",
   "pins" : [
     {
       "identity" : "bedrock",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tannerdsilva/bedrock.git",
       "state" : {
-        "revision" : "b6626ac8ecee31975093e01427e10f4cc299409a"
+        "revision" : "554e4b8392937d7fa0b07819af272f229b4b60c5",
+        "version" : "7.0.1"
       }
     },
     {
@@ -19,11 +20,21 @@
       }
     },
     {
+      "identity" : "quicklmdb",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tannerdsilva/QuickLMDB.git",
+      "state" : {
+        "revision" : "980d58655a9535ef8f88e1215f998cf96239b848",
+        "version" : "14.0.0"
+      }
+    },
+    {
       "identity" : "rawdog",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tannerdsilva/rawdog.git",
       "state" : {
-        "revision" : "b249e367e35c0ea05ae7b7dc0046074b5b05c604"
+        "revision" : "6115f31ffcc9612bd2b9c5c950c3b413241c5ece",
+        "version" : "20.0.0"
       }
     },
     {
@@ -40,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-syntax.git",
       "state" : {
-        "revision" : "0687f71944021d616d34d922343dcef086855920",
-        "version" : "600.0.1"
+        "revision" : "4799286537280063c85a32f09884cfbca301b1a1",
+        "version" : "602.0.0"
       }
     },
     {

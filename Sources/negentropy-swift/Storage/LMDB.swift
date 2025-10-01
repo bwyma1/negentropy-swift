@@ -10,7 +10,8 @@ extension MDB_db_strict where Self.MDB_db_key_type: StorageID {
 		return try dbStatistics(tx: trans).ms_entries
 	}
 	
-	func numElements(begin: Self.MDB_db_key_type, end: Self.MDB_db_key_type?) throws -> Int {
+	func numElements(begin: Self.MDB_db_key_type?, end: Self.MDB_db_key_type?) throws -> Int {
+		guard let begin = begin else { return 0 }
 		let env = dbEnvironment()
 		let trans = try Transaction(env: env, readOnly: true)
 		return try cursor(tx: trans) { cursor in
@@ -72,7 +73,8 @@ extension MDB_db_strict where Self.MDB_db_key_type: StorageID {
 		}
 	}
 
-	func iterate(begin: Self.MDB_db_key_type, end: Self.MDB_db_key_type?, cb: (Self.MDB_db_key_type) -> Bool) throws {
+	func iterate(begin: Self.MDB_db_key_type?, end: Self.MDB_db_key_type?, cb: (Self.MDB_db_key_type) -> Bool) throws {
+		guard let begin = begin else { return }
 		if(begin == end) {return}
 		let env = dbEnvironment()
 		let trans = try Transaction(env: env, readOnly: true)
@@ -96,7 +98,8 @@ extension MDB_db_strict where Self.MDB_db_key_type: StorageID {
 		}
 	}
 
-	func findLowerBound(begin: Self.MDB_db_key_type, end: Self.MDB_db_key_type?, value: Self.MDB_db_key_type) throws -> Self.MDB_db_key_type? {
+	func findLowerBound(begin: Self.MDB_db_key_type?, end: Self.MDB_db_key_type?, value: Self.MDB_db_key_type) throws -> Self.MDB_db_key_type? {
+		guard let begin = begin else { return nil }
 		let env = dbEnvironment()
 		let trans = try Transaction(env: env, readOnly: true)
 		return try cursor(tx: trans) { cursor in

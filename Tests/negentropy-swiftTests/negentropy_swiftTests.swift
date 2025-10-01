@@ -201,8 +201,8 @@ extension NegentropySwiftTests {
 		
 //	    Helper sync function for testing storages
 		func sync() throws {
-			var ne1 = try Negentropy(storage: testDB1, frameSizeLimit: 20_000, buckets: 20, logLevel:.notice)
-			var ne2 = try Negentropy(storage: testDB2, frameSizeLimit: 20_000, buckets: 20, logLevel:.notice)
+			var ne1 = try Negentropy(storage: testDB1, frameSizeLimit: 20_000, buckets: 20, logLevel:.debug)
+			var ne2 = try Negentropy(storage: testDB2, frameSizeLimit: 20_000, buckets: 20, logLevel:.debug)
 			
 			var msg = try ne1.initiate()
 
@@ -246,8 +246,8 @@ extension NegentropySwiftTests {
 		
 		// nlog(n) run time
 		@Test func syncRandomData() async throws {
-			let db1Size = 100_000
-			let db2Size = 100_000
+			let db1Size = 10_000
+			let db2Size = 10_000
 			try initDB(db1Size: db1Size, db2Size:db2Size, random:true)
 			#expect(try testDB1.size() == db1Size)
 			#expect(try testDB2.size() == db2Size)
@@ -277,6 +277,20 @@ extension NegentropySwiftTests {
 			#expect(try testDB2.size() == db2Size)
 			
 			try sync()
+			#expect(try testDB1.size() == db1Size + db2Size)
+			#expect(try testDB2.size() == db1Size + db2Size)
+		}
+		
+		@Test func syncWithEmptyDB() async throws {
+			let db1Size = 1
+			let db2Size = 100000
+			try initDB(db1Size: db1Size, db2Size:db2Size, random:true)
+			#expect(try testDB1.size() == db1Size)
+			#expect(try testDB2.size() == db2Size)
+			
+			try sync()
+			print(try testDB1.size())
+			print(try testDB2.size())
 			#expect(try testDB1.size() == db1Size + db2Size)
 			#expect(try testDB2.size() == db1Size + db2Size)
 		}

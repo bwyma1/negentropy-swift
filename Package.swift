@@ -15,9 +15,9 @@ let package = Package(
             targets: ["negentropy-swift"]),
     ],
 	dependencies:[
-		.package(url:"https://github.com/tannerdsilva/rawdog.git", revision:"b249e367e35c0ea05ae7b7dc0046074b5b05c604"),
-		.package(name: "QuickLMDB", path: "../QuickLMDB"),
-		.package(url:"https://github.com/tannerdsilva/bedrock.git", revision:"b6626ac8ecee31975093e01427e10f4cc299409a")
+		.package(url:"https://github.com/tannerdsilva/rawdog.git", "20.0.0"..<"21.0.0"),
+		.package(url:"https://github.com/tannerdsilva/QuickLMDB.git", "14.0.0"..<"14.1.0"),
+		.package(url:"https://github.com/tannerdsilva/bedrock.git", "7.0.1"..<"8.0.0"),
 	],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
