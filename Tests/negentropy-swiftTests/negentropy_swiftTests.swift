@@ -56,15 +56,15 @@ extension NegentropySwiftTests {
 		}
 		
 		@Test func first() throws {
-			#expect(try testDB.first().RAW_native() == 10)
+			#expect(try testDB.first()!.RAW_native() == 10)
 		}
 		
 		@Test func last() throws {
-			#expect(try testDB.last().RAW_native() == 100)
+			#expect(try testDB.last()!.RAW_native() == 100)
 		}
 		
 		@Test func shift() throws {
-			let curr = try testDB.first()
+			let curr = try testDB.first()!
 			#expect(try testDB.shift(curr:curr, amount:0)!.RAW_native() == 10)
 			#expect(try testDB.shift(curr:curr, amount:3)!.RAW_native() == 40)
 			#expect(try testDB.shift(curr:curr, amount:7)!.RAW_native() == 80)
@@ -72,14 +72,14 @@ extension NegentropySwiftTests {
 		}
 		
 		@Test func prev() throws {
-			let curr = try testDB.last()
+			let curr = try testDB.last()!
 			#expect(try testDB.prev(curr:curr).RAW_native() == 90)
 			#expect(try testDB.prev(curr:testDB.prev(curr:curr)).RAW_native() == 80)
 		}
 		
 		@Test func numElements() throws {
-			let key1 = try testDB.first()
-			var key2 = try testDB.last()
+			let key1 = try testDB.first()!
+			var key2 = try testDB.last()!
 			
 			#expect(try testDB.numElements(begin:key1, end:key1) == 0)
 			#expect(try testDB.numElements(begin:key1, end:key2) == 9)
@@ -89,8 +89,8 @@ extension NegentropySwiftTests {
 		}
 		
 		@Test func findLowerBound() throws {
-			let key1 = try testDB.first()
-			let key2 = try testDB.last()
+			let key1 = try testDB.first()!
+			let key2 = try testDB.last()!
 			
 			let id1:TestingID = TestingID(RAW_native: 45)
 			#expect(try testDB.findLowerBound(begin:key1, end:key2, value:id1)!.RAW_native() == 50)
@@ -100,8 +100,8 @@ extension NegentropySwiftTests {
 		}
 		
 		@Test func fingerPrint() throws {
-			let key1 = try testDB.first()
-			let key2 = try testDB.last()
+			let key1 = try testDB.first()!
+			let key2 = try testDB.last()!
 			let key3 = try testDB.shift(curr:key1, amount:5)
 			
 			#expect(try testDB.fingerprint(begin:key1, end:key2) != testDB.fingerprint(begin:key1, end:key3))
@@ -288,7 +288,7 @@ extension NegentropySwiftTests {
 		}
 		
 		@Test func syncWithEmptyDB() async throws {
-			let db1Size = 1
+			let db1Size = 0
 			let db2Size = 100000
 			try initDB(db1Size: db1Size, db2Size:db2Size, random:true)
 			#expect(try testDB1.size() == db1Size)

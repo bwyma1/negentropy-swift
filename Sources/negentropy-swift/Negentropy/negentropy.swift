@@ -169,7 +169,7 @@ public struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, Databas
 	}
 	
 	private mutating func reconcileAux(query: inout [UInt8], haveIds: inout [ID], needIds: inout [ID]) throws -> [UInt8] {
-		log.debug("Reconciling Query", metadata: ["query": "\(query.count)"])
+		log.trace("Reconciling Query", metadata: ["query": "\(query.count)"])
 		var fullOutput:[UInt8] = []
 		
 		var prevBound = (ID(RAW_staticbuff: ID.RAW_staticbuff_zeroed()), MemoryLayout<ID>.size)

@@ -28,7 +28,8 @@ extension MDB_db_strict where Self.MDB_db_key_type: StorageID {
 		}
 	}
 
-	func first() throws -> Self.MDB_db_key_type {
+	func first() throws -> Self.MDB_db_key_type? {
+		guard try size() > 0 else { return nil }
 		let env = dbEnvironment()
 		let trans = try Transaction(env: env, readOnly: true)
 		return try cursor(tx: trans) { cursor in
@@ -36,7 +37,8 @@ extension MDB_db_strict where Self.MDB_db_key_type: StorageID {
 		}
 	}
 	
-	func last() throws -> Self.MDB_db_key_type {
+	func last() throws -> Self.MDB_db_key_type? {
+		guard try size() > 0 else { return nil }
 		let env = dbEnvironment()
 		let trans = try Transaction(env: env, readOnly: true)
 		return try cursor(tx: trans) { cursor in
