@@ -13,7 +13,7 @@ enum Mode: UInt8 {
 	case idList = 2
 }
 
-protocol StorageID: Sendable, Equatable, Comparable, MDB_comparable, Hashable
+public protocol StorageID: Sendable, Equatable, Comparable, MDB_comparable, Hashable
 where Self: RAW_staticbuff, Self:Equatable, Self:Comparable { }
 
 @RAW_staticbuff(bytes: 6)

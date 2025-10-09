@@ -65,9 +65,9 @@ struct NegentropyData:Sendable, RAW_encodable, RAW_decodable {
 @RAW_staticbuff_fixedwidthinteger_type<UInt64>(bigEndian:true)
 internal struct EncodedUInt64:Sendable, ExpressibleByIntegerLiteral {}
 
-struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.MDB_db_key_type: StorageID {
+public struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.MDB_db_key_type: StorageID {
 	
-	typealias ID = DatabaseType.MDB_db_key_type
+	public typealias ID = DatabaseType.MDB_db_key_type
 	
 	private let buckets:Int
 	private var storage: DatabaseType
@@ -77,7 +77,7 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 	
 	private let log:Logger
 	
-	init(storage: DatabaseType, frameSizeLimit: UInt64 = 0, buckets:Int = 16, logLevel:Logger.Level) throws {
+	public init(storage: DatabaseType, frameSizeLimit: UInt64 = 0, buckets:Int = 16, logLevel:Logger.Level) throws {
 		var buildLogger = Logger(label:"\(String(describing:Self.self))")
 		buildLogger.logLevel = logLevel
 		log = buildLogger
