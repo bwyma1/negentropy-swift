@@ -205,6 +205,9 @@ extension NegentropySwiftTests {
 			var ne2 = try Negentropy(storage: testDB2, frameSizeLimit: 20_000, buckets: 20, logLevel:.debug)
 			
 			var msg = try ne1.initiate()
+			
+			var allHave : [StoredIDExample] = []
+			var allNeed : [StoredIDExample] = []
 
 			while(true) {
 				msg = try ne2.reconcile(query: msg)
@@ -213,34 +216,37 @@ extension NegentropySwiftTests {
 				var need:[StoredIDExample] = []
 				let newMsg = try ne1.reconcile(query: msg, haveIds: &have, needIds: &need)
 				
-				for id in need {
-					logID(id: id)
-					// Find the item for the id and insert into the other vector
-					let tx2 = try Transaction(env:env2, readOnly:false)
-					let value = try testDB2.loadEntry(key: id, tx: tx2)
-					
-					let tx1 = try Transaction(env:env1, readOnly:false)
-					try testDB1.cursor(tx:tx1) { cursor in
-						try cursor.setEntry(key:id, value:value, flags:[])
-					}
-					try tx1.commit()
-				}
-				
-				for id in have {
-					logID(id: id)
-					// Find the item for the id and insert into the other vector
-					let tx1 = try Transaction(env:env1, readOnly:false)
-					let value = try testDB1.loadEntry(key: id, tx: tx1)
-					
-					let tx2 = try Transaction(env:env2, readOnly:false)
-					try testDB2.cursor(tx:tx2) { cursor in
-						try cursor.setEntry(key:id, value:value, flags:[])
-					}
-					try tx2.commit()
-				}
+				allHave.append(contentsOf: have)
+				allNeed.append(contentsOf: need)
 				
 				if(newMsg == nil) { break }
 				else { msg = newMsg! }
+			}
+			
+			for id in allNeed {
+				logID(id: id)
+				// Find the item for the id and insert into the other vector
+				let tx2 = try Transaction(env:env2, readOnly:false)
+				let value = try testDB2.loadEntry(key: id, tx: tx2)
+				
+				let tx1 = try Transaction(env:env1, readOnly:false)
+				try testDB1.cursor(tx:tx1) { cursor in
+					try cursor.setEntry(key:id, value:value, flags:[])
+				}
+				try tx1.commit()
+			}
+			
+			for id in allHave {
+				logID(id: id)
+				// Find the item for the id and insert into the other vector
+				let tx1 = try Transaction(env:env1, readOnly:false)
+				let value = try testDB1.loadEntry(key: id, tx: tx1)
+				
+				let tx2 = try Transaction(env:env2, readOnly:false)
+				try testDB2.cursor(tx:tx2) { cursor in
+					try cursor.setEntry(key:id, value:value, flags:[])
+				}
+				try tx2.commit()
 			}
 		}
 		

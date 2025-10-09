@@ -4,6 +4,63 @@ import RAW
 
 let MAX_U64: UInt64 = UInt64.max
 
+enum MessageType:UInt8 {
+	case initiator = 0
+	case responder = 1
+}
+
+@RAW_staticbuff(bytes: 4)
+struct NegentropyMagicNumber:Sendable, Equatable {
+	init() {
+		let magicBytes = Array("NEGT".utf8)
+		self = Self(RAW_staticbuff:magicBytes)
+	}
+}
+
+@RAW_staticbuff(bytes: 1)
+struct NegentropyType:Sendable {
+	init(type: MessageType) {
+		let arrType:[UInt8] = [UInt8(type.rawValue)]
+		self = Self(RAW_staticbuff:arrType)
+	}
+}
+
+struct NegentropyData:Sendable, RAW_encodable, RAW_decodable {
+	
+	let magicNumber:NegentropyMagicNumber
+	let type:NegentropyType
+	let data:[UInt8]
+	
+	init(type:MessageType, data:consuming [UInt8]) {
+		self.magicNumber = NegentropyMagicNumber()
+		self.type = NegentropyType(type: type)
+		self.data = data
+	}
+	
+	init?(RAW_decode inputPtr:consuming UnsafeRawPointer, count:size_t) {
+		guard count >= MemoryLayout<NegentropyMagicNumber>.size + MemoryLayout<NegentropyType>.size else { return nil }
+		(magicNumber, type, data) = withUnsafeMutablePointer(to:&inputPtr) { RAW_decode in
+			let bufferMagicNumber = NegentropyMagicNumber(RAW_staticbuff_seeking: RAW_decode)
+			let type = NegentropyType(RAW_staticbuff_seeking: RAW_decode)
+			let dataCount = count - MemoryLayout<NegentropyMagicNumber>.size - MemoryLayout<NegentropyType>.size
+			return (bufferMagicNumber, type, [UInt8](RAW_decode:RAW_decode.pointee, count: dataCount))
+		}
+		let testMagicNumber = NegentropyMagicNumber()
+		guard testMagicNumber == magicNumber else { return nil }
+	}
+	
+	func RAW_encode(count: inout RAW.size_t) {
+		count = MemoryLayout<NegentropyMagicNumber>.size + MemoryLayout<NegentropyType>.size + data.count
+	}
+	
+	func RAW_encode(dest: UnsafeMutablePointer<UInt8>) -> UnsafeMutablePointer<UInt8> {
+		var dest = magicNumber.RAW_encode(dest:	dest)
+		dest = type.RAW_encode(dest: dest)
+		dest = data.RAW_encode(dest: dest)
+		return dest
+	}
+}
+
 @RAW_staticbuff(bytes:8)
 @RAW_staticbuff_fixedwidthinteger_type<UInt64>(bigEndian:true)
 internal struct EncodedUInt64:Sendable, ExpressibleByIntegerLiteral {}
@@ -40,7 +97,7 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 		isInitiator = true
 		
 		var output:[UInt8] = try splitRange(lower: storage.first(), upper: nil, upperBound: getMaxBound())
-		
+		encodeHeader(type: .responder, data: &output)
 		return output
 	}
 	
@@ -52,19 +109,54 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 		guard !isInitiator else {
 			throw NegentropyError.wrongInitiator
 		}
+		guard query.count > 0 else {
+			throw NegentropyError.expectedResponderMessage
+		}
+		var verifiedQuery = try query.withUnsafeBytes { ptr in
+			guard let negData = NegentropyData(RAW_decode: ptr.baseAddress!, count: ptr.count) else {
+				throw NegentropyError.expectedResponderMessage
+			}
+			let negType = negData.type.RAW_access{ ptr in
+				return MessageType(rawValue: ptr.first!)
+			}
+			guard negType == .responder else {
+				throw NegentropyError.expectedResponderMessage
+			}
+			
+			return negData.data
+		}
 		var haveIds:[ID] = []
 		var needIds:[ID] = []
-		return try reconcileAux(query: &query, haveIds: &haveIds, needIds: &needIds)
+		var retData = try reconcileAux(query: &verifiedQuery, haveIds: &haveIds, needIds: &needIds)
+		encodeHeader(type: .initiator, data: &retData)
+		return retData
 	}
 	
 	public mutating func reconcile(query: consuming [UInt8], haveIds: inout [ID], needIds: inout [ID]) throws -> [UInt8]? {
 		guard isInitiator else {
 			throw NegentropyError.wrongInitiator
 		}
-		let output = try reconcileAux(query: &query, haveIds: &haveIds, needIds: &needIds)
+		guard query.count > 0 else {
+			throw NegentropyError.expectedInitiatorMessage
+		}
+		var verifiedQuery = try query.withUnsafeBytes { ptr in
+			guard let negData = NegentropyData(RAW_decode: ptr.baseAddress!, count: ptr.count) else {
+				throw NegentropyError.expectedInitiatorMessage
+			}
+			let negType = negData.type.RAW_access{ ptr in
+				return MessageType(rawValue: ptr.first!)
+			}
+			guard negType == .initiator else {
+				throw NegentropyError.expectedInitiatorMessage
+			}
+			
+			return negData.data
+		}
+		var output = try reconcileAux(query: &verifiedQuery, haveIds: &haveIds, needIds: &needIds)
 		if output.count == 0 {
 			return nil
 		}
+		encodeHeader(type: .responder, data: &output)
 		return output
 	}
 	
@@ -88,7 +180,7 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 			// Temporary output for this iteration
 			var o:[UInt8] = []
 			
-			var currBound = try decodeBound(encoded: &query)
+			let currBound = try decodeBound(encoded: &query)
 			let mode = try decodeMode(&query)
 			
 			// Lower and upper in terms of our storage
@@ -285,7 +377,7 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 	
 	// Returns the maximum bound (special bound)
 	private func getMaxBound() -> (bound:ID, len:Int) {
-		var maxID:[UInt8] = Array(repeating: 255, count: MemoryLayout<ID>.size)
+		let maxID:[UInt8] = Array(repeating: 255, count: MemoryLayout<ID>.size)
 		let id = maxID.withUnsafeBufferPointer { ptr in
 			return ID(RAW_accessed: ptr)!
 		}
@@ -295,7 +387,7 @@ struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.M
 
 // ---------------- Encode Functions ----------------
 extension Negentropy {
-	func encodeBound(_ b:ID, len:Int) -> [UInt8] {
+	private func encodeBound(_ b:ID, len:Int) -> [UInt8] {
 		var ret:[UInt8] = []
 		ret += [UInt8(len)]
 		ret += b.RAW_access { ptr in
@@ -304,7 +396,7 @@ extension Negentropy {
 		return ret
 	}
 	
-	func encodeNumElements(_ numElements:Int) -> [UInt8] {
+	private func encodeNumElements(_ numElements:Int) -> [UInt8] {
 		// Use static buff for endianness
 		let encodedNumElements = EncodedUInt64(RAW_native:UInt64(numElements))
 		return encodedNumElements.RAW_access { ptr in
@@ -315,7 +407,7 @@ extension Negentropy {
 
 // ---------------- Decode Functions ----------------
 extension Negentropy {
-	func decodeBound(encoded: inout [UInt8]) throws -> (bound:ID, len:Int) {
+	private func decodeBound(encoded: inout [UInt8]) throws -> (bound:ID, len:Int) {
 		guard !encoded.isEmpty else { throw NegentropyError.parseEndsPrematurely }
 		
 		let len = Int(encoded[encoded.startIndex])
@@ -329,7 +421,7 @@ extension Negentropy {
 		}
 	}
 	
-	func decodeNumElements(_ encoded: inout [UInt8]) throws -> Int {
+	private func decodeNumElements(_ encoded: inout [UInt8]) throws -> Int {
 		guard encoded.count >= 8 else { throw NegentropyError.parseEndsPrematurely }
 		// Extract int
 		let value = encoded.RAW_access {
@@ -339,7 +431,7 @@ extension Negentropy {
 		return Int(value)
 	}
 	
-	func decodeMode(_ encoded: inout [UInt8]) throws -> Mode {
+	private func decodeMode(_ encoded: inout [UInt8]) throws -> Mode {
 		guard encoded.count >= 1 else { throw NegentropyError.parseEndsPrematurely }
 		
 		let ret:Mode = Mode(rawValue: encoded[encoded.startIndex])!
@@ -347,7 +439,7 @@ extension Negentropy {
 		return ret
 	}
 	
-	func decodeFingerprint(_ encoded: inout [UInt8]) throws -> [UInt8] {
+	private func decodeFingerprint(_ encoded: inout [UInt8]) throws -> [UInt8] {
 		guard encoded.count >= FINGERPRINT_SIZE else { throw NegentropyError.parseEndsPrematurely }
 
 		let slice = encoded.prefix(FINGERPRINT_SIZE)
@@ -356,7 +448,7 @@ extension Negentropy {
 		return Array(slice)
 	}
 	
-	func decodeID(_ encoded: inout [UInt8]) throws -> ID {
+	private func decodeID(_ encoded: inout [UInt8]) throws -> ID {
 		guard encoded.count >= ID_SIZE else { throw NegentropyError.parseEndsPrematurely }
 		
 		defer {
@@ -364,6 +456,19 @@ extension Negentropy {
 		}
 		return encoded.withUnsafeBufferPointer { ptr in
 			return ID(RAW_staticbuff: ptr.baseAddress!)
+		}
+	}
+}
+
+// Negentropy packet headers
+// Type 0 - Initiator Message
+// Type 1 - Responder Message
+extension Negentropy {
+	func encodeHeader(type:MessageType, data:inout [UInt8]) {
+		let negData = NegentropyData(type: type, data: data)
+		data = [UInt8](repeating: 0, count: data.count + 5)
+		_ = data.withUnsafeMutableBytes { ptr in
+			negData.RAW_encode(dest: ptr.baseAddress!.assumingMemoryBound(to: UInt8.self))
 		}
 	}
 }
