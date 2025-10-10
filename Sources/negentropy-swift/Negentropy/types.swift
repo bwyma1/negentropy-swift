@@ -16,7 +16,7 @@ enum Mode: UInt8 {
 public protocol StorageID: Sendable, Equatable, Comparable, MDB_comparable, Hashable
 where Self: RAW_staticbuff, Self:Equatable, Self:Comparable { }
 
-@RAW_staticbuff(bytes: 6)
+@RAW_staticbuff(bytes: 10)
 @MDB_comparable
 public struct StoredIDExample:StorageID, Sendable, Hashable { }
 

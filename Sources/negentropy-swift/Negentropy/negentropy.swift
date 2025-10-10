@@ -169,7 +169,7 @@ public struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, Databas
 	}
 	
 	private mutating func reconcileAux(query: inout [UInt8], haveIds: inout [ID], needIds: inout [ID]) throws -> [UInt8] {
-		log.trace("Reconciling Query", metadata: ["query": "\(query.count)"])
+		log.debug("Reconciling Query", metadata: ["query": "\(query.count)"])
 		var fullOutput:[UInt8] = []
 		
 		var prevBound = (ID(RAW_staticbuff: ID.RAW_staticbuff_zeroed()), MemoryLayout<ID>.size)
@@ -358,7 +358,7 @@ public struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, Databas
 		
 		currKey.RAW_access { ptr in
 			prevKey.RAW_access { ptr2 in
-				for i in 0..<ID_SIZE {
+				for i in 0..<MemoryLayout<ID>.size {
 					sharedPrefixBytes += 1
 					if(ptr[i] != ptr2[i]) {
 						break
@@ -413,7 +413,7 @@ extension Negentropy {
 		let len = Int(encoded[encoded.startIndex])
 		guard encoded.count >= len else { throw NegentropyError.parseEndsPrematurely }
 		encoded.removeFirst(1)
-		let idArray = Array(encoded.prefix(len)) + Array(repeating: 0, count: ID_SIZE - len)
+		let idArray = Array(encoded.prefix(len)) + Array(repeating: 0, count: MemoryLayout<ID>.size - len)
 		encoded.removeFirst(len)
 
 		return idArray.withUnsafeBufferPointer { ptr in
@@ -449,10 +449,10 @@ extension Negentropy {
 	}
 	
 	private func decodeID(_ encoded: inout [UInt8]) throws -> ID {
-		guard encoded.count >= ID_SIZE else { throw NegentropyError.parseEndsPrematurely }
+		guard encoded.count >= MemoryLayout<ID>.size else { throw NegentropyError.parseEndsPrematurely }
 		
 		defer {
-			encoded.removeFirst(ID_SIZE)
+			encoded.removeFirst(MemoryLayout<ID>.size)
 		}
 		return encoded.withUnsafeBufferPointer { ptr in
 			return ID(RAW_staticbuff: ptr.baseAddress!)

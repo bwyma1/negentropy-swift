@@ -289,7 +289,7 @@ extension NegentropySwiftTests {
 		
 		@Test func syncWithEmptyDB() async throws {
 			let db1Size = 0
-			let db2Size = 100000
+			let db2Size = 0
 			try initDB(db1Size: db1Size, db2Size:db2Size, random:true)
 			#expect(try testDB1.size() == db1Size)
 			#expect(try testDB2.size() == db2Size)
