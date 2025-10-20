@@ -1,181 +1,179 @@
 import RAW
 import RAW_blake2
 import QuickLMDB
+import NIO
+import Logging
 
-extension MDB_db_strict where Self.MDB_db_key_type: StorageID {
-	
-	func size() throws -> Int {
-		let env = dbEnvironment()
-		let trans = try Transaction(env: env, readOnly: true)
-		return try dbStatistics(tx: trans).ms_entries
+enum Mode:UInt8 {
+	case skip = 0
+	case fingerprint = 1
+	case idList = 2
+}
+
+enum IO<BoundIdentifierType:RAW_staticbuff> {
+	enum IdentifierBacking {
+		case rawBytes(UnsafeRawBufferPointer)
+		case identifier(BoundIdentifierType)
+	}
+	case bound(Bound<BoundIdentifierType>)
+	case numberOfElements(Int)
+	case fingerprint(Fingerprint)
+	case id(IdentifierBacking)
+	case mode(Mode)
+}
+struct InternalFatalError:Swift.Error {}
+
+
+
+extension MDB_db_strict where Self.MDB_db_key_type:DatabaseIndexVector {
+	private func doSkip(channel:Channel, _ skip:inout Bool, _ prevBound:Bound<MDB_db_key_type>) {
+		if skip {
+			skip = false
+			o.append(.bound(prevBound))
+			o.append(.mode(.skip))
+		}
 	}
 	
-	func numElements(begin: Self.MDB_db_key_type?, end: Self.MDB_db_key_type?) throws -> Int {
-		guard let begin = begin else { return 0 }
-		let env = dbEnvironment()
-		let trans = try Transaction(env: env, readOnly: true)
-		return try cursor(tx: trans) { cursor in
-			var count = 0
-			if(begin == end) {return count}
-			var key:Self.MDB_db_key_type? = try cursor.opSetRange(key: begin).key
-			while true {
-				if(key == end || key == nil) {
-					return count
-				}
-				key = try? cursor.opNext().key
-				count += 1
+}
+
+extension MDB_cursor_strict where Self.MDB_cursor_dbtype.MDB_db_key_type:DatabaseIndexVector {
+	private borrowing func reconcileAux(channel:Channel, isInitiator:Bool, buckets:Int, queryBuffer:inout ByteBuffer, haveIDs:inout Set<MDB_cursor_dbtype.MDB_db_key_type>, needIDs:inout Set<MDB_cursor_dbtype.MDB_db_key_type>, tx:borrowing Transaction) throws {
+		guard buckets > 0 else {
+			fatalError("fatal developer usage error in \(#function) - `buckets` must be greater than 0 - \(#file):\(#line)")
+		}
+		var returnValues = [IO<MDB_cursor_dbtype.MDB_db_key_type>]()
+		var prevBound = Bound(length:RAW_byte(RAW_native:UInt8(MemoryLayout<MDB_cursor_dbtype.MDB_db_key_type>.size)), identifier:MDB_cursor_dbtype.MDB_db_key_type(RAW_staticbuff: MDB_cursor_dbtype.MDB_db_key_type.RAW_staticbuff_zeroed()))
+		var prevIndex = try opFirst(returning:(key:MDB_val, value:MDB_val).self).key
+		var skip:Bool = false
+		while queryBuffer.readableBytes > 0 {
+			// read the length of the bound key
+			let dataLength = queryBuffer.readInteger(as:UInt8.self)!
+			guard let readBytes = queryBuffer.readBytes(length:Int(dataLength)) else {
+				throw InternalFatalError()
 			}
-		}
-	}
-
-	func first() throws -> Self.MDB_db_key_type? {
-		guard try size() > 0 else { return nil }
-		let env = dbEnvironment()
-		let trans = try Transaction(env: env, readOnly: true)
-		return try cursor(tx: trans) { cursor in
-			return try cursor.opFirst().key
-		}
-	}
-	
-	func last() throws -> Self.MDB_db_key_type? {
-		guard try size() > 0 else { return nil }
-		let env = dbEnvironment()
-		let trans = try Transaction(env: env, readOnly: true)
-		return try cursor(tx: trans) { cursor in
-			return try cursor.opLast().key
-		}
-	}
-	
-	func shift(curr: Self.MDB_db_key_type, amount: Int) throws -> Self.MDB_db_key_type? {
-		let env = dbEnvironment()
-		let trans = try Transaction(env: env, readOnly: true)
-		return try cursor(tx: trans) { cursor in
-			_ = try cursor.opSetRange(key: curr)
-			for _ in 0..<abs(amount) {
-				if amount < 0 {
-					_ = try cursor.opPrevious()
-				} else {
-					do {
-						_ = try cursor.opNext()
-					} catch {
-						return nil
+			// read the bound key based on the length
+			let curBound = Bound<MDB_cursor_dbtype.MDB_db_key_type>(length:RAW_byte(RAW_native:dataLength), identifier:MDB_cursor_dbtype.MDB_db_key_type(RAW_staticbuff:readBytes))
+			guard let modeByte = queryBuffer.readInteger(as:UInt8.self), let mode = Mode(rawValue:modeByte) else {
+				throw InternalFatalError()
+			}
+			var lower = prevIndex
+			var upper = try curBound.identifier.MDB_access { (curBoundKey:consuming MDB_val) in
+				return try findLowerBound(begin:&prevIndex, value:&curBoundKey)
+			}
+			switch mode {
+				case .skip:
+					skip = true
+				case .fingerprint:
+					guard let fingerprintBytes = queryBuffer.readBytes(length:MemoryLayout<Fingerprint>.size) else {
+						throw InternalFatalError()
 					}
-				}
-			}
-			return try cursor.opGetCurrent().key
-		}
-	}
-	
-	func prev(curr:Self.MDB_db_key_type) throws -> Self.MDB_db_key_type {
-		let env = dbEnvironment()
-		let trans = try Transaction(env: env, readOnly: true)
-		return try cursor(tx: trans) { cursor in
-			_ = try cursor.opSetRange(key: curr)
-			return try cursor.opPrevious().key
-		}
-	}
-
-	func iterate(begin: Self.MDB_db_key_type?, end: Self.MDB_db_key_type?, cb: (Self.MDB_db_key_type) -> Bool) throws {
-		guard let begin = begin else { return }
-		if(begin == end) {return}
-		let env = dbEnvironment()
-		let trans = try Transaction(env: env, readOnly: true)
-		try cursor(tx: trans) { cursor in
-			var key:Self.MDB_db_key_type? = try cursor.opSetRange(key: begin).key
-			while true {
-				if(cb(key!) == false) {
-					break
-				}
-				key = try? cursor.opNext().key
-				guard let end = end else {
-					if(key == end) {
-						break
+					let theirFingerprint = Fingerprint(RAW_staticbuff:fingerprintBytes)
+					let ourFingerprint = try fingerprint(begin:&lower, end:&upper)
+					if theirFingerprint != ourFingerprint {
+						doSkip(&returnValues, &skip, prevBound)
+						returnValues.append(contentsOf:try splitRange(buckets:buckets, lower:&lower, upper:&upper, upperBound:curBound, tx:tx))
+					} else {
+						skip = true
 					}
-					continue
-				}
-				if(key! >= end) {
-					break
-				}
-			}
-		}
-	}
-
-	func findLowerBound(begin: Self.MDB_db_key_type?, end: Self.MDB_db_key_type?, value: Self.MDB_db_key_type) throws -> Self.MDB_db_key_type? {
-		guard let begin = begin else { return nil }
-		let env = dbEnvironment()
-		let trans = try Transaction(env: env, readOnly: true)
-		return try cursor(tx: trans) { cursor in
-			let first = try cursor.opSetRange(key: begin).key
-			if(value <= first) {
-				return first
-			}
-			while let key = try? cursor.opNext().key {
-				if(key == end) {
-					break
-				}
-				if(value <= key) {
-					return key
-				}
-			}
-			return end
-		}
-	}
-
-	func fingerprint(begin: Self.MDB_db_key_type?, end: Self.MDB_db_key_type?) throws -> Fingerprint {
-		guard let begin = begin else {
-			return Fingerprint(RAW_staticbuff: Fingerprint.RAW_staticbuff_zeroed())
-		}
-		if(end != nil) {
-			guard begin < end! else {
-				return Fingerprint(RAW_staticbuff: Fingerprint.RAW_staticbuff_zeroed())
-			}
-		}
-		var hasher = try WGHasher<Self.MDB_db_key_type>()
-		let env = dbEnvironment()
-		let trans = try Transaction(env: env, readOnly: true)
-		try cursor(tx: trans) { cursor in
-			var key:Self.MDB_db_key_type? = try cursor.opSetRange(key: begin).key
-			while true {
-				try hasher.update(key!)
-				key = try? cursor.opNext().key
-				guard let end = end else {
-					if(key == end) {
-						break
+				case .idList:
+					guard let numIDs = queryBuffer.readInteger(endianness:.big, as:EncodedUInt64.RAW_native_type.self) else {
+						throw InternalFatalError()
 					}
-					continue
-				}
-				if(key! >= end) {
-					break
-				}
+					var theirIDs = Set<MDB_cursor_dbtype.MDB_db_key_type>()
+					for _ in 0..<numIDs {
+						guard let idBytes = queryBuffer.readBytes(length:MemoryLayout<MDB_cursor_dbtype.MDB_db_key_type>.size) else {
+							throw InternalFatalError()
+						}
+						let id = MDB_cursor_dbtype.MDB_db_key_type(RAW_staticbuff:idBytes)
+						if isInitiator {
+							theirIDs.insert(id)
+						}
+					}
+
+					if isInitiator {
+						skip = true
+						try iterate(begin:&lower, end:&upper) { id in
+							let key = MDB_cursor_dbtype.MDB_db_key_type(RAW_staticbuff:id.pointee.mv_data)
+							if theirIDs.contains(key) {
+								theirIDs.remove(key)
+							} else {
+								haveIDs.update(with:key)
+							}
+							return true
+						}
+						
+						for id in theirIDs {
+							needIDs.update(with: id)
+						}
+					} else {
+						doSkip(&returnValues, &skip, prevBound)
+						var responseIds:[IO<MDB_cursor_dbtype.MDB_db_key_type>] = []
+						try iterate(begin:&lower, end:&upper) { id in
+							let key = MDB_cursor_dbtype.MDB_db_key_type(RAW_staticbuff:id.pointee.mv_data)
+							responseIds.append(.id(.identifier(key)))
+							return true
+						}
+
+						returnValues.append(.bound(curBound))
+						returnValues.append(.mode(.idList))
+						returnValues.append(.numberOfElements(responseIds.count))
+						returnValues.append(contentsOf: responseIds)
+					}
 			}
-		}
-		let h = try hasher.finish()
-		return h.RAW_access { ptr in
-			let first16 = Array(ptr.prefix(FINGERPRINT_SIZE)) + Array(repeating: 0, count: max(0, FINGERPRINT_SIZE - ptr.count))
-			return first16.withUnsafeBufferPointer { arrPtr in
-				return Fingerprint(RAW_staticbuff: arrPtr.baseAddress!)
-			}
-		}
-	}
-	
-	func itemFor(_ id: Self.MDB_db_key_type) throws -> Self.MDB_db_val_type? {
-		let env = dbEnvironment()
-		let trans = try Transaction(env: env, readOnly: true)
-		return try cursor(tx: trans) { cursor in
-			let end = try cursor.opLast()
-			let first = try cursor.opFirst()
-			if(first.key == id) {
-				return first.value
-			}
-			while let next = try? cursor.opNext() {
-				if(next.key == id) {
-					return next.value
-				}
-				if(next.key >= end.key) {
-					break
-				}
-			}
-			return nil
+			prevIndex = upper
+			prevBound = curBound
 		}
 	}
 }
+
+extension MDB_db_strict where Self.MDB_db_key_type:DatabaseIndexVector {
+	private func splitRange(channel:Channel, buckets:Int, lower:UnsafePointer<MDB_val>, upper:UnsafePointer<MDB_val>, upperBound:Bound<MDB_db_key_type>, tx:borrowing Transaction) throws -> [IO<MDB_db_key_type>] {
+		func getMinimalBound(prev:MDB_val, cur:MDB_val) -> Bound<MDB_db_key_type> {
+			var sharedPrefixBytes:UInt8 = 0
+			var returnKey = MDB_db_key_type.RAW_comparable_fixed_theoretical_min()
+			returnKey.RAW_access_mutating { retKey in
+				copyLoop: for i in 0..<min(cur.mv_size, prev.mv_size) {
+					if cur.mv_data.assumingMemoryBound(to:UInt8.self)[i] == prev.mv_data.assumingMemoryBound(to:UInt8.self)[i] {
+						retKey[i] = cur.mv_data.assumingMemoryBound(to:UInt8.self)[i]
+						sharedPrefixBytes += 1
+					} else {
+						break copyLoop
+					}
+				}
+			}
+			return Bound<MDB_db_key_type>(length:RAW_byte(RAW_native:sharedPrefixBytes), identifier:returnKey)
+		}
+		
+		var ret:[IO<MDB_db_key_type>] = []
+		try cursor(tx:tx) { cursor in
+			let numElements:Int = try cursor.countEntries(begin:lower, end:upper)
+			if (numElements < buckets * 2) {
+				// | Bound | idList (0x2) | numIds (i.e. 20) | ID1 | ID2 | ... | ID20 |
+				ret.append(.bound(upperBound))
+				ret.append(.mode(.idList))
+				ret.append(.numberOfElements(numElements))
+				try cursor.iterate(begin:lower, end:upper, { id in
+					ret.append(.id(.rawBytes(UnsafeRawBufferPointer(start:id.pointee.mv_data, count:id.pointee.mv_size))))
+					return true
+				})
+			} else {
+				let idsPerBucket:Int = numElements / buckets
+				let bucketsWithExtra = numElements % buckets
+				var cur = try cursor.opSetRange(returning:(key:MDB_val, value:MDB_val).self, key:lower.pointee).key
+				// For each bucket
+				// | Bound (last id this bucket, next bucket first id) | fingerprintMode (1) | Fingerprint |
+				for i in 0..<buckets {
+					let bucketSize = idsPerBucket + (i < bucketsWithExtra ? 1 : 0)
+					let ourFingerprint = try cursor.fingerprintShift(begin:&cur, bucketSize:bucketSize)
+					let endCurrBucket = try cursor.opGetCurrent(returning:(key:MDB_val, value:MDB_val).self).key
+					let startNextBucket = try cursor.opNext(returning:(key:MDB_val, value:MDB_val).self).key
+					ret.append(.bound(getMinimalBound(prev:endCurrBucket, cur:startNextBucket)))
+					ret.append(.mode(.fingerprint))
+					ret.append(.fingerprint(ourFingerprint))
+				}
+			}
+		}
+		return ret
+	}
+}
+
