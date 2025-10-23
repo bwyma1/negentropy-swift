@@ -1,5 +1,5 @@
 {
-  "originHash" : "612412488cbb8cc8ed80d23c73c4e5e42c971fa4ec62223df201364ad3b264b1",
+  "originHash" : "6d56aae25fa6faec489bdc8a69e4931e8f0743c69703b3d8854336e0fa9005bf",
   "pins" : [
     {
       "identity" : "bedrock",
@@ -26,6 +26,32 @@
       "state" : {
         "revision" : "980d58655a9535ef8f88e1215f998cf96239b848",
         "version" : "14.0.0"
+      }
+    },
+    {
+      "identity" : "rawdog",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tannerdsilva/rawdog",
+      "state" : {
+        "revision" : "ba588bc9e3b824c8e0e1d7868a3b7cf9dd876b81"
+      }
+    },
+    {
+      "identity" : "swift-argument-parser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-argument-parser.git",
+      "state" : {
+        "revision" : "cdd0ef3755280949551dc26dee5de9ddeda89f54",
+        "version" : "1.6.2"
+      }
+    },
+    {
+      "identity" : "swift-async-algorithms",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-async-algorithms.git",
+      "state" : {
+        "revision" : "042e1c4d9d19748c9c228f8d4ebc97bb1e339b0b",
+        "version" : "1.0.4"
       }
     },
     {
@@ -65,6 +91,15 @@
       }
     },
     {
+      "identity" : "swift-service-lifecycle",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swift-server/swift-service-lifecycle",
+      "state" : {
+        "revision" : "0fcc4c9c2d58dd98504c06f7308c86de775396ff",
+        "version" : "2.9.0"
+      }
+    },
+    {
       "identity" : "swift-syntax",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-syntax.git",
@@ -80,6 +115,14 @@
       "state" : {
         "revision" : "395a77f0aa927f0ff73941d7ac35f2b46d47c9db",
         "version" : "1.6.3"
+      }
+    },
+    {
+      "identity" : "wireguard-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tannerdsilva/wireguard-swift",
+      "state" : {
+        "revision" : "e27b8dc8e80b8157d6bb31cf107e858ff90a484e"
       }
     }
   ],

@@ -9,9 +9,10 @@ extension MDB_cursor_strict where Self.MDB_cursor_dbtype.MDB_db_key_type:Databas
 	internal func fingerprintShift(begin:UnsafePointer<MDB_val>, bucketSize:Int) throws -> Fingerprint {
 		var hasher = try RAW_blake2.Hasher<S, Fingerprint>()
 		var key:MDB_val = try opSetRange(returning:(key:MDB_val, value:MDB_val).self, key:begin.pointee).key
-		for _ in 0..<bucketSize {
-			try hasher.update(key.mv_data, count:key.mv_size)
+		try hasher.update(key.mv_data, count:key.mv_size)
+		for _ in 1..<bucketSize {
 			key = try opNext(returning:(key:MDB_val, value:MDB_val).self).key
+			try hasher.update(key.mv_data, count:key.mv_size)
 		}
 		return try hasher.finish()
 	}

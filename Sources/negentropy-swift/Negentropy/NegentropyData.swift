@@ -1,10 +1,19 @@
 import RAW
+import NIO
 
-struct NegentropyData<ByteContainerType:Sequence & Sendable>:Sendable where ByteContainerType.Element == UInt8 {
+enum MessageType:UInt8 {
+	case initiator = 0
+	case responder = 1
+	case dataQuery = 2
+	case data = 3
+	case finish = 4
+}
+
+struct NegentropyData {
 	let magicNumber:NegentropyMagicNumber
 	let type:MessageType
-	let data:ByteContainerType
-	init(type:consuming MessageType, data:consuming ByteContainerType) {
+	var data:ByteBuffer
+	init(type:consuming MessageType, data:consuming ByteBuffer) {
 		self.magicNumber = NegentropyMagicNumber()
 		self.type = type
 		self.data = data
@@ -12,7 +21,7 @@ struct NegentropyData<ByteContainerType:Sequence & Sendable>:Sendable where Byte
 }
 
 // MARK: RAW_decodable
-extension NegentropyData:RAW_decodable where ByteContainerType:RAW_decodable {
+extension NegentropyData:RAW_decodable {
 	init?(RAW_decode inputPtr:UnsafeRawPointer, count:RAW.size_t) {
 		var seekPtr = inputPtr
 		// read the magic number
@@ -30,23 +39,27 @@ extension NegentropyData:RAW_decodable where ByteContainerType:RAW_decodable {
 		// read any remaining data (assuming a fatal state if the count is invalid)
 		let remainingCount = count - MemoryLayout<NegentropyMagicNumber>.size - 1
 		guard remainingCount >= 0 else { fatalError("critical internal error \(#file):\(#line)") }
-		guard let decodedData = ByteContainerType(RAW_decode:seekPtr, count:remainingCount) else { return nil }
+		// Decode the remaining count into a byteBuffer
+		var decodedData = ByteBufferAllocator().buffer(capacity: remainingCount)
+		if remainingCount > 0 {
+			decodedData.writeBytes(
+				UnsafeRawBufferPointer(start: seekPtr, count: remainingCount)
+			)
+		}
 		self.data = decodedData
 	}
 }
 
-// MARK: RAW_encodable
-extension NegentropyData:RAW_encodable where ByteContainerType:RAW_encodable {
-	func RAW_encode(count: inout RAW.size_t) {
-		magicNumber.RAW_encode(count:&count)
-		count += 1
-		data.RAW_encode(count:&count)
-	}
-	func RAW_encode(dest: UnsafeMutablePointer<UInt8>) -> UnsafeMutablePointer<UInt8> {
-		var dest = magicNumber.RAW_encode(dest:dest)
-		dest.pointee = type.rawValue
-		dest = dest + 1
-		dest = data.RAW_encode(dest:dest)
-		return dest
+// MARK: Encoding
+extension NegentropyData {
+	// encode header onto existing bytebuffer
+	mutating func encode() -> ByteBuffer {
+		var headerData = ByteBufferAllocator().buffer(capacity: 5 + data.readableBytes)
+		_ = magicNumber.RAW_access { ptr in
+			headerData.writeBytes(ptr)
+		}
+		headerData.writeBytes([type.rawValue])
+		headerData.writeBuffer(&data)
+		return headerData
 	}
 }

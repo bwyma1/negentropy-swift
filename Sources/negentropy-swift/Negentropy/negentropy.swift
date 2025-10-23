@@ -2,114 +2,111 @@ import QuickLMDB
 import Logging
 import RAW
 
-enum MessageType:UInt8 {
-	case initiator = 0
-	case responder = 1
-}
 
-public struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.MDB_db_key_type: StorageID {
-	public typealias ID = DatabaseType.MDB_db_key_type
-	
-	private let buckets:Int
-	private var storage: DatabaseType
-	private let frameSizeLimit: UInt64
-	
-	private var isInitiator = false
-	
-	private let log:Logger
-	
-	public init(storage:DatabaseType, frameSizeLimit:UInt64 = 0, buckets:Int = 16, logLevel:Logger.Level) throws {
-		var buildLogger = Logger(label:"\(String(describing:Self.self))")
-		buildLogger.logLevel = logLevel
-		log = buildLogger
-		if frameSizeLimit != 0 && frameSizeLimit < 4096 {
-			throw NegentropyError.frameSizeTooSmall
-		}
-		self.buckets = buckets
-		self.storage = storage
-		self.frameSizeLimit = frameSizeLimit
-	}
-}
 
-	public mutating func initiate() throws -> [UInt8] {
-		guard !isInitiator else {
-			throw NegentropyError.wrongInitiator
-		}
-		isInitiator = true
-		
-		var output:[UInt8] = try splitRange(lower: storage.first(), upper: nil, upperBound: getMaxBound())
-		encodeHeader(type: .responder, data: &output)
-		return output
-	}
+//public struct Negentropy<DatabaseType> where DatabaseType:MDB_db_strict, DatabaseType.MDB_db_key_type: StorageID {
+//	public typealias ID = DatabaseType.MDB_db_key_type
+//	
+//	private let buckets:Int
+//	private var storage: DatabaseType
+//	private let frameSizeLimit: UInt64
+//	
+//	private var isInitiator = false
+//	
+//	private let log:Logger
+//	
+//	public init(storage:DatabaseType, frameSizeLimit:UInt64 = 0, buckets:Int = 16, logLevel:Logger.Level) throws {
+//		var buildLogger = Logger(label:"\(String(describing:Self.self))")
+//		buildLogger.logLevel = logLevel
+//		log = buildLogger
+//		if frameSizeLimit != 0 && frameSizeLimit < 4096 {
+//			throw NegentropyError.frameSizeTooSmall
+//		}
+//		self.buckets = buckets
+//		self.storage = storage
+//		self.frameSizeLimit = frameSizeLimit
+//	}
+//}
+//
+//	public mutating func initiate() throws -> [UInt8] {
+//		guard !isInitiator else {
+//			throw NegentropyError.wrongInitiator
+//		}
+//		isInitiator = true
+//		
+//		var output:[UInt8] = try splitRange(lower: storage.first(), upper: nil, upperBound: getMaxBound())
+//		encodeHeader(type: .responder, data: &output)
+//		return output
+//	}
 	
 // 	public mutating func setInitiator() {
 // 		isInitiator = true
 // 	}
 	
-	// public func reconcile(query: consuming [UInt8]) throws -> [UInt8] {
-	// 	guard !isInitiator else {
-	// 		throw NegentropyError.wrongInitiator
-	// 	}
-	// 	guard query.count > 0 else {
-	// 		throw NegentropyError.expectedResponderMessage
-	// 	}
-	// 	var verifiedQuery = try query.withUnsafeBytes { ptr in
-	// 		guard let negData = NegentropyData(RAW_decode: ptr.baseAddress!, count: ptr.count) else {
-	// 			throw NegentropyError.expectedResponderMessage
-	// 		}
-	// 		let negType = negData.type.RAW_access{ ptr in
-	// 			return MessageType(rawValue: ptr.first!)
-	// 		}
-	// 		guard negType == .responder else {
-	// 			throw NegentropyError.expectedResponderMessage
-	// 		}
-			
-	// 		return negData.data
-	// 	}
-	// 	var haveIds:[ID] = []
-	// 	var needIds:[ID] = []
-	// 	var retData = try reconcileAux(query: &verifiedQuery, haveIds: &haveIds, needIds: &needIds)
-	// 	encodeHeader(type: .initiator, data: &retData)
-	// 	return retData
-	// }
-	
-
-	// public mutating func reconcile(query: consuming [UInt8], haveIds: inout [ID], needIds: inout [ID]) throws -> [UInt8]? {
-	// 	guard isInitiator else {
-	// 		throw NegentropyError.wrongInitiator
-	// 	}
-	// 	guard query.count > 0 else {
-	// 		throw NegentropyError.expectedInitiatorMessage
-	// 	}
-	// 	var verifiedQuery = try query.withUnsafeBytes { ptr in
-	// 		guard let negData = NegentropyData(RAW_decode: ptr.baseAddress!, count: ptr.count) else {
-	// 			throw NegentropyError.expectedInitiatorMessage
-	// 		}
-	// 		let negType = negData.type.RAW_access { ptr in
-	// 			return MessageType(rawValue:ptr.first!)
-	// 		}
-	// 		guard negType == .initiator else {
-	// 			throw NegentropyError.expectedInitiatorMessage
-	// 		}
-			
-	// 		return negData.data
-	// 	}
-	// 	var output = try reconcileAux(query: &verifiedQuery, haveIds: &haveIds, needIds: &needIds)
-	// 	if output.count == 0 {
-	// 		return nil
-	// 	}
-	// 	encodeHeader(type: .responder, data: &output)
-	// 	return output
-	// }
-
-
-	private func doSkip(_ o:inout [SplitRangeResult], _ skip: inout Bool, _ prevBound:(bound:ID, len:Int)) {
-		if skip {
-			skip = false
-			o += encodeBound(prevBound.bound, len: prevBound.len)
-			o += [Mode.skip.rawValue]
-		}
-	}
+//	 public func reconcile(query: consuming [UInt8]) throws -> [UInt8] {
+//	 	guard !isInitiator else {
+//	 		throw NegentropyError.wrongInitiator
+//	 	}
+//	 	guard query.count > 0 else {
+//	 		throw NegentropyError.expectedResponderMessage
+//	 	}
+//	 	var verifiedQuery = try query.withUnsafeBytes { ptr in
+//	 		guard let negData = NegentropyData(RAW_decode: ptr.baseAddress!, count: ptr.count) else {
+//	 			throw NegentropyError.expectedResponderMessage
+//	 		}
+//	 		let negType = negData.type.RAW_access{ ptr in
+//	 			return MessageType(rawValue: ptr.first!)
+//	 		}
+//	 		guard negType == .responder else {
+//	 			throw NegentropyError.expectedResponderMessage
+//	 		}
+//			
+//	 		return negData.data
+//	 	}
+//	 	var haveIds:[ID] = []
+//	 	var needIds:[ID] = []
+//	 	var retData = try reconcileAux(query: &verifiedQuery, haveIds: &haveIds, needIds: &needIds)
+//	 	encodeHeader(type: .initiator, data: &retData)
+//	 	return retData
+//	 }
+//	
+//
+//	 public mutating func reconcile(query: consuming [UInt8], haveIds: inout [ID], needIds: inout [ID]) throws -> [UInt8]? {
+//	 	guard isInitiator else {
+//	 		throw NegentropyError.wrongInitiator
+//	 	}
+//	 	guard query.count > 0 else {
+//	 		throw NegentropyError.expectedInitiatorMessage
+//	 	}
+//	 	var verifiedQuery = try query.withUnsafeBytes { ptr in
+//	 		guard let negData = NegentropyData(RAW_decode: ptr.baseAddress!, count: ptr.count) else {
+//	 			throw NegentropyError.expectedInitiatorMessage
+//	 		}
+//	 		let negType = negData.type.RAW_access { ptr in
+//	 			return MessageType(rawValue:ptr.first!)
+//	 		}
+//	 		guard negType == .initiator else {
+//	 			throw NegentropyError.expectedInitiatorMessage
+//	 		}
+//			
+//	 		return negData.data
+//	 	}
+//	 	var output = try reconcileAux(query: &verifiedQuery, haveIds: &haveIds, needIds: &needIds)
+//	 	if output.count == 0 {
+//	 		return nil
+//	 	}
+//	 	encodeHeader(type: .responder, data: &output)
+//	 	return output
+//	 }
+//
+//
+//	private func doSkip(_ o:inout [SplitRangeResult], _ skip: inout Bool, _ prevBound:(bound:ID, len:Int)) {
+//		if skip {
+//			skip = false
+//			o += encodeBound(prevBound.bound, len: prevBound.len)
+//			o += [Mode.skip.rawValue]
+//		}
+//	}
 	
 	// private mutating func reconcileAux(query: inout [UInt8], haveIds: inout [ID], needIds: inout [ID]) throws -> [UInt8] {
 	// 	log.debug("Reconciling Query", metadata: ["query": "\(query.count)"])
