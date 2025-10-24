@@ -21,7 +21,11 @@ extension MDB_cursor_strict where Self.MDB_cursor_dbtype.MDB_db_key_type:Databas
 		var key:MDB_val = try opSetRange(returning:(key:MDB_val, value:MDB_val).self, key:begin.pointee).key
 		while cb(&key) {
 			do {
-				key = try opNext(returning:(key:MDB_val, value:MDB_val).self).key
+				do {
+					key = try opNext(returning:(key:MDB_val, value:MDB_val).self).key
+				} catch LMDBError.notFound {
+					break
+				}
 				guard MDB_cursor_dbtype.MDB_db_key_type.MDB_compare_f(&key, end) < 0 else {
 					break
 				}

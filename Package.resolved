@@ -1,5 +1,5 @@
 {
-  "originHash" : "6d56aae25fa6faec489bdc8a69e4931e8f0743c69703b3d8854336e0fa9005bf",
+  "originHash" : "bca91df32ab30cd08ccd404ccc5f140e675d53489a8ca0e688bd07262df021ad",
   "pins" : [
     {
       "identity" : "bedrock",
@@ -17,15 +17,6 @@
       "state" : {
         "revision" : "4ce5826424f8e65f395efc5b4c611479384722b1",
         "version" : "0.9.30"
-      }
-    },
-    {
-      "identity" : "quicklmdb",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tannerdsilva/QuickLMDB.git",
-      "state" : {
-        "revision" : "980d58655a9535ef8f88e1215f998cf96239b848",
-        "version" : "14.0.0"
       }
     },
     {

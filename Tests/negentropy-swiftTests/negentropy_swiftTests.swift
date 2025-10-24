@@ -23,12 +23,12 @@ struct NegentropySwiftTests {}
 @MDB_comparable
 public struct TestingID: Sendable, DatabaseIndexVector {}
 
-//extension NegentropySwiftTests {
-//	@Suite("Negentropy LMDB Tests",
-//		   .serialized
-//	)
-//	struct LMDBExtensionTests {
-//		
+extension NegentropySwiftTests {
+	@Suite("Negentropy LMDB Tests",
+		   .serialized
+	)
+	struct LMDBExtensionTests {
+		
 //		private let logger:Logger
 //		private let env:Environment
 //		private let testDB:Database.Strict<TestingID, Data>
@@ -55,57 +55,19 @@ public struct TestingID: Sendable, DatabaseIndexVector {}
 //			}
 //			try newTrans.commit()
 //		}
-//		
-//		@Test func shift() throws {
-//			let tx = try Transaction(env:env, readOnly:false)
-//			let curr = try testDB.cursor(tx: tx) { cursor in
-//				return try cursor.opFirst(returning:(key:MDB_val, value:MDB_val).self).key
-//			}
-//			#expect(try testDB.shift(curr:curr, amount:0)!.RAW_native() == 10)
-//			#expect(try testDB.shift(curr:curr, amount:3)!.RAW_native() == 40)
-//			#expect(try testDB.shift(curr:curr, amount:7)!.RAW_native() == 80)
-//			#expect(try testDB.shift(curr:curr, amount:10) == nil)
-//			
-//		}
-//		
-//		@Test func prev() throws {
-//			let curr = try testDB.last()!
-//			#expect(try testDB.prev(curr:curr).RAW_native() == 90)
-//			#expect(try testDB.prev(curr:testDB.prev(curr:curr)).RAW_native() == 80)
-//		}
-//		
-//		@Test func numElements() throws {
-//			let key1 = try testDB.first()!
-//			var key2 = try testDB.last()!
-//			
-//			#expect(try testDB.numElements(begin:key1, end:key1) == 0)
-//			#expect(try testDB.numElements(begin:key1, end:key2) == 9)
-//			
-//			key2 = try testDB.prev(curr:key2)
-//			#expect(try testDB.numElements(begin:key1, end:key2) == 8)
-//		}
-//		
-//		@Test func findLowerBound() throws {
-//			let key1 = try testDB.first()!
-//			let key2 = try testDB.last()!
-//			
-//			let id1:TestingID = TestingID(RAW_native: 45)
-//			#expect(try testDB.findLowerBound(begin:key1, end:key2, value:id1)!.RAW_native() == 50)
-//			
-//			let id2:TestingID = TestingID(RAW_native: 67)
-//			#expect(try testDB.findLowerBound(begin:key1, end:key2, value:id2)!.RAW_native() == 70)
-//		}
-//		
-//		@Test func fingerPrint() throws {
-//			let key1 = try testDB.first()!
-//			let key2 = try testDB.last()!
-//			let key3 = try testDB.shift(curr:key1, amount:5)
-//			
-//			#expect(try testDB.fingerprint(begin:key1, end:key2) != testDB.fingerprint(begin:key1, end:key3))
-//			#expect(try testDB.fingerprint(begin:key1, end:key2) != testDB.fingerprint(begin:key1, end:nil))
-//		}
-//	}
-//}
+		@Test func newTest() {
+			let idmin:TestingID = TestingID.RAW_comparable_fixed_theoretical_min()
+			let idmax:TestingID = TestingID.RAW_comparable_fixed_theoretical_max()
+			idmin.MDB_access { (mdbvalmin:consuming MDB_val) in
+				idmax.MDB_access { (mdbvalmax:consuming MDB_val) in
+					#expect(TestingID.MDB_compare_f(&mdbvalmin, &mdbvalmax) < 0)
+				}
+			}
+		}
+		
+		
+	}
+}
 
 extension NegentropySwiftTests {
 	@Suite("Negentropy Live LMDB Tests",
@@ -131,7 +93,7 @@ extension NegentropySwiftTests {
 		
 		init() throws {
 			let base = Path(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop").path)
-			var finalPath = base.appendingPathComponent("test-db1.mdb")
+			var finalPath = base.appendingPathComponent("aliceDB.mdb")
 			let memoryMapSize = size_t(finalPath.getFileSize() + 5 * 1024 * 1024 * 1024) // add 5mb to the file
 			aliceEnv = try Environment(path:finalPath.path(), flags:[.noSubDir], mapSize:memoryMapSize, maxReaders:16, maxDBs:1, mode:[.ownerReadWriteExecute, .groupReadExecute, .otherReadExecute])
 			var newTrans = try Transaction(env:aliceEnv, readOnly:false)
@@ -140,7 +102,7 @@ extension NegentropySwiftTests {
 			
 			try newTrans.commit()
 			
-			finalPath = base.appendingPathComponent("test-db2.mdb")
+			finalPath = base.appendingPathComponent("bobDB.mdb")
 			bobEnv = try Environment(path:finalPath.path(), flags:[.noSubDir], mapSize:memoryMapSize, maxReaders:16, maxDBs:1, mode:[.ownerReadWriteExecute, .groupReadExecute, .otherReadExecute])
 			newTrans = try Transaction(env:bobEnv, readOnly:false)
 			bobDB = try! Database.Strict<TestingID, Data>(env:bobEnv, name:nil, flags:[.create], tx:newTrans)
@@ -171,6 +133,7 @@ extension NegentropySwiftTests {
 					for i in 0..<db1Size {
 						// Make key
 						let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+//						let id:TestingID = TestingID(RAW_native: UInt64(i * 10))
 						logID(id: id)
 						try cursor.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
 					}
@@ -182,6 +145,7 @@ extension NegentropySwiftTests {
 					for i in 0..<db2Size {
 						// Make key
 						let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+//						let id:TestingID = TestingID(RAW_native: UInt64(i * 10))
 						logID(id: id)
 						try cursor.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
 					}
@@ -233,30 +197,37 @@ extension NegentropySwiftTests {
 				logger.info("waiting for bob's interface to initialize...")
 				try await bobInterface.waitForChannelInit()
 				
-				let syncThread = NegentropySyncThread(([aliceDB], try aliceInterface.getChannel(), bobFifo, bobPublicKey))
+				let syncThread = await NegentropySyncThread(([aliceDB], try aliceInterface.getChannel(), bobFifo, bobPublicKey))
 				
-				let listenThread = NegentropyListenThread(([bobDB], try bobInterface.getChannel(), aliceFifo, alicePublicKey))
+				let listenThread = await NegentropyListenThread(([bobDB], try bobInterface.getChannel(), aliceFifo, alicePublicKey))
 				
 				foo.addTask {
-					syncThread.pthreadWork()
+					try syncThread.pthreadWork()
 				}
 				
-				listenThread.pthreadWork()
+				try listenThread.pthreadWork()
+				
+				foo.cancelAll()
+				try await foo.waitForAll()
+				return
 			})
 		}
 		
-//		@Test func syncRandomData() async throws {
-//			let db1Size = 10_000
-//			let db2Size = 10_000
-//			try initDB(db1Size: db1Size, db2Size:db2Size, random:true)
-//			#expect(try aliceDB.size() == db1Size)
-//			#expect(try bobDB.size() == db2Size)
+		@Test func syncRandomData() async throws {
+			let aliceSize = 9000
+			let bobSize = 1
+			try initDB(db1Size: aliceSize, db2Size:bobSize, random:true)
+			
+			try await sync()
+//			let aliceTrans = try Transaction(env:aliceEnv, readOnly:false)
+//			let bobTrans = try Transaction(env:bobEnv, readOnly:false)
 //			
-//			try sync()
-//			#expect(try aliceDB.size() == db1Size + db2Size)
-//			#expect(try bobDB.size() == db1Size + db2Size)
-//		}
-//		
+//			#expect(try dbStatistics(tx: aliceTrans).ms_entries == db1Size + db2Size)
+//			#expect(try dbStatistics(tx: bobTrans).ms_entries == db1Size + db2Size)
+//			aliceTrans.commit()
+//			bobTrans.commit()
+		}
+		
 //		@Test func syncSameData() async throws {
 //			let db1Size = 100_000
 //			let db2Size = 100_000
