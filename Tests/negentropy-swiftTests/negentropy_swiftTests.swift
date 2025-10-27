@@ -9,7 +9,7 @@ import RAW_dh25519
 import wireguard_userspace_nio
 import bedrock_fifo
 import NIO
-@testable import negentropy_swift
+import negentropy_swift
 
 @RAW_staticbuff(bytes: 8)
 @RAW_staticbuff_fixedwidthinteger_type<UInt64>(bigEndian: true)
@@ -27,46 +27,7 @@ extension NegentropySwiftTests {
 	@Suite("Negentropy LMDB Tests",
 		   .serialized
 	)
-	struct LMDBExtensionTests {
-		
-//		private let logger:Logger
-//		private let env:Environment
-//		private let testDB:Database.Strict<TestingID, Data>
-//		
-//		init() throws {
-//			let base = Path(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop").path)
-//			let finalPath = base.appendingPathComponent("test-db1.mdb")
-//			let memoryMapSize = size_t(finalPath.getFileSize() + 5 * 1024 * 1024) // add 5mb to the file
-//			env = try Environment(path:finalPath.path(), flags:[.noSubDir], mapSize:memoryMapSize, maxReaders:16, maxDBs:1, mode:[.ownerReadWriteExecute, .groupReadExecute, .otherReadExecute])
-//			let newTrans = try Transaction(env:env, readOnly:false)
-//			testDB = try! Database.Strict<TestingID, Data>(env:env, name:nil, flags:[.create], tx:newTrans)
-//			try testDB.deleteAllEntries(tx:newTrans)
-//			var makelogger = Logger(label: "negentropy-swift-tests")
-//			makelogger.logLevel = .debug
-//			logger = makelogger
-//			try testDB.cursor(tx:newTrans) { cursor in
-//				for i in 1..<11 {
-//					// Make key
-//					let id:TestingID = TestingID(RAW_native: UInt64(i * 10))
-//					
-//					logger.trace("writing example data")
-//					try cursor.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
-//				}
-//			}
-//			try newTrans.commit()
-//		}
-		@Test func newTest() {
-			let idmin:TestingID = TestingID.RAW_comparable_fixed_theoretical_min()
-			let idmax:TestingID = TestingID.RAW_comparable_fixed_theoretical_max()
-			idmin.MDB_access { (mdbvalmin:consuming MDB_val) in
-				idmax.MDB_access { (mdbvalmax:consuming MDB_val) in
-					#expect(TestingID.MDB_compare_f(&mdbvalmin, &mdbvalmax) < 0)
-				}
-			}
-		}
-		
-		
-	}
+	struct LMDBExtensionTests { }
 }
 
 extension NegentropySwiftTests {
@@ -77,10 +38,10 @@ extension NegentropySwiftTests {
 		
 		private let logger:Logger
 		private let aliceEnv:Environment
-		private let aliceDB:Database.Strict<TestingID, Data>
+		private var aliceDBs:[Database.Strict<TestingID, Data>] = []
 		
 		private let bobEnv:Environment
-		private let bobDB:Database.Strict<TestingID, Data>
+		private var bobDBs:[Database.Strict<TestingID, Data>] = []
 		
 		static let aliceStaticPrivateKey = MemoryGuarded<PrivateKey>(RAW_decode:try! RAW_base64.decode("8DFnI7tPWLl4WmuEp4T5KVuKMW6iyjRdTb3IVaDe+kI="), count:32)!
 		static let bobStaticPrivateKey = MemoryGuarded<PrivateKey>(RAW_decode:try! RAW_base64.decode("SD/y8yQa/DgiYRnDI9vJEiGezNn4yLd/4yL9OLnej0A="), count:32)!
@@ -95,20 +56,10 @@ extension NegentropySwiftTests {
 			let base = Path(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop").path)
 			var finalPath = base.appendingPathComponent("aliceDB.mdb")
 			let memoryMapSize = size_t(finalPath.getFileSize() + 5 * 1024 * 1024 * 1024) // add 5mb to the file
-			aliceEnv = try Environment(path:finalPath.path(), flags:[.noSubDir], mapSize:memoryMapSize, maxReaders:16, maxDBs:1, mode:[.ownerReadWriteExecute, .groupReadExecute, .otherReadExecute])
-			var newTrans = try Transaction(env:aliceEnv, readOnly:false)
-			aliceDB = try! Database.Strict<TestingID, Data>(env:aliceEnv, name:nil, flags:[.create], tx:newTrans)
-			try aliceDB.deleteAllEntries(tx:newTrans)
-			
-			try newTrans.commit()
+			aliceEnv = try Environment(path:finalPath.path(), flags:[.noSubDir], mapSize:memoryMapSize, maxReaders:16, maxDBs:3, mode:[.ownerReadWriteExecute, .groupReadExecute, .otherReadExecute])
 			
 			finalPath = base.appendingPathComponent("bobDB.mdb")
-			bobEnv = try Environment(path:finalPath.path(), flags:[.noSubDir], mapSize:memoryMapSize, maxReaders:16, maxDBs:1, mode:[.ownerReadWriteExecute, .groupReadExecute, .otherReadExecute])
-			newTrans = try Transaction(env:bobEnv, readOnly:false)
-			bobDB = try! Database.Strict<TestingID, Data>(env:bobEnv, name:nil, flags:[.create], tx:newTrans)
-			try bobDB.deleteAllEntries(tx:newTrans)
-			
-			try newTrans.commit()
+			bobEnv = try Environment(path:finalPath.path(), flags:[.noSubDir], mapSize:memoryMapSize, maxReaders:16, maxDBs:3, mode:[.ownerReadWriteExecute, .groupReadExecute, .otherReadExecute])
 			
 			var makelogger = Logger(label: "negentropy-swift-tests")
 			makelogger.logLevel = .notice
@@ -124,56 +75,71 @@ extension NegentropySwiftTests {
 			})
 		}
 		
-		// Helper write func
-		func initDB(db1Size:Int, db2Size:Int, random:Bool = true) throws {
-			if(random) {
-				var newTrans = try Transaction(env:aliceEnv, readOnly:false)
-				try aliceDB.deleteAllEntries(tx:newTrans)
-				try aliceDB.cursor(tx:newTrans) { cursor in
-					for i in 0..<db1Size {
-						// Make key
-						let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
-//						let id:TestingID = TestingID(RAW_native: UInt64(i * 10))
-						logID(id: id)
-						try cursor.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
-					}
+		mutating func addDBAlice(aliceDBSize:Int, dbName:String) throws {
+			let newTrans = try Transaction(env:aliceEnv, readOnly:false)
+
+			let aliceDB = try! Database.Strict<TestingID, Data>(env:aliceEnv, name:dbName, flags:[.create], tx:newTrans)
+			try aliceDB.deleteAllEntries(tx:newTrans)
+			
+			try aliceDB.cursor(tx:newTrans) { cursor in
+				for i in 0..<aliceDBSize {
+					let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+					logID(id: id)
+					try cursor.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
 				}
-				try newTrans.commit()
-				newTrans = try Transaction(env:bobEnv, readOnly:false)
-				try bobDB.deleteAllEntries(tx:newTrans)
-				try bobDB.cursor(tx:newTrans) { cursor in
-					for i in 0..<db2Size {
-						// Make key
-						let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
-//						let id:TestingID = TestingID(RAW_native: UInt64(i * 10))
-						logID(id: id)
-						try cursor.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
-					}
-				}
-				try newTrans.commit()
-			} else {
-				let newTrans1 = try Transaction(env:aliceEnv, readOnly:false)
-				let newTrans2 = try Transaction(env:bobEnv, readOnly:false)
-				try aliceDB.deleteAllEntries(tx:newTrans1)
-				try bobDB.deleteAllEntries(tx:newTrans2)
-				try aliceDB.cursor(tx:newTrans1) { cursor1 in
-					try aliceDB.cursor(tx:newTrans2) { cursor2 in
-						for i in 0..<db1Size {
-							// Make key
-							let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
-							logID(id: id)
-							try cursor1.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
-							try cursor2.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
-						}
-					}
-				}
-				try newTrans1.commit()
-				try newTrans2.commit()
 			}
+			
+			try newTrans.commit()
+			aliceDBs.append(aliceDB)
+		}
+		
+		mutating func addDBBob(bobDBSize:Int, dbName:String) throws {
+			let newTrans = try Transaction(env:bobEnv, readOnly:false)
+			let bobDB = try! Database.Strict<TestingID, Data>(env:bobEnv, name:dbName, flags:[.create], tx:newTrans)
+			try bobDB.deleteAllEntries(tx:newTrans)
+			
+			try bobDB.cursor(tx:newTrans) { cursor in
+				for i in 0..<bobDBSize {
+					let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+					logID(id: id)
+					try cursor.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
+				}
+			}
+			
+			try newTrans.commit()
+			bobDBs.append(bobDB)
+		}
+		
+		mutating func addIdenticalDBs(dbSize:Int, dbName:String) throws {
+			let newTrans1 = try Transaction(env:aliceEnv, readOnly:false)
+			let newTrans2 = try Transaction(env:bobEnv, readOnly:false)
+			let aliceDB = try! Database.Strict<TestingID, Data>(env:aliceEnv, name:dbName, flags:[.create], tx:newTrans1)
+			try aliceDB.deleteAllEntries(tx:newTrans1)
+			let bobDB = try! Database.Strict<TestingID, Data>(env:bobEnv, name:dbName, flags:[.create], tx:newTrans2)
+			try bobDB.deleteAllEntries(tx:newTrans2)
+			
+			try aliceDB.deleteAllEntries(tx:newTrans1)
+			try bobDB.deleteAllEntries(tx:newTrans2)
+			try aliceDB.cursor(tx:newTrans1) { cursor1 in
+				try aliceDB.cursor(tx:newTrans2) { cursor2 in
+					for i in 0..<dbSize {
+						// Make key
+						let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+						logID(id: id)
+						try cursor1.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
+						try cursor2.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
+					}
+				}
+			}
+
+			try newTrans1.commit()
+			try newTrans2.commit()
+			aliceDBs.append(aliceDB)
+			bobDBs.append(bobDB)
 		}
 		
 //	    Helper sync function for testing storages
-		func sync() async throws {
+		func sync(oneWaySync:Bool) async throws {
 			
 			_ = try await withThrowingTaskGroup(body: { foo in
 				let bobFifo = FIFO<ByteBuffer, Swift.Error>()
@@ -197,15 +163,20 @@ extension NegentropySwiftTests {
 				logger.info("waiting for bob's interface to initialize...")
 				try await bobInterface.waitForChannelInit()
 				
-				let syncThread = await NegentropySyncThread(([aliceDB], try aliceInterface.getChannel(), bobFifo, bobPublicKey))
+				let syncThread = await NegentropySyncThread((aliceDBs, try aliceInterface.getChannel(), bobFifo, bobPublicKey, oneWaySync:oneWaySync))
 				
-				let listenThread = await NegentropyListenThread(([bobDB], try bobInterface.getChannel(), aliceFifo, alicePublicKey))
+				
 				
 				foo.addTask {
 					try syncThread.pthreadWork()
 				}
 				
-				try listenThread.pthreadWork()
+				let iterator = aliceFifo.makeSyncConsumerBlocking()
+				// Wait to listener initiation
+				if let incomingData = try iterator.next() {
+					let listenThread = await NegentropyListenThread((bobDBs, try bobInterface.getChannel(), aliceFifo, alicePublicKey, incomingData))
+					try listenThread.pthreadWork()
+				}
 				
 				foo.cancelAll()
 				try await foo.waitForAll()
@@ -213,57 +184,82 @@ extension NegentropySwiftTests {
 			})
 		}
 		
-		@Test func syncRandomData() async throws {
-			let aliceSize = 9000
-			let bobSize = 1
-			try initDB(db1Size: aliceSize, db2Size:bobSize, random:true)
+		func checkSize(aliceDB:Database.Strict<TestingID, Data>, bobDB:Database.Strict<TestingID, Data>, aliceSize:Int, bobSize:Int) throws  {
+			let aliceTrans = try Transaction(env:aliceEnv, readOnly:false)
+			let bobTrans = try Transaction(env:bobEnv, readOnly:false)
 			
-			try await sync()
-//			let aliceTrans = try Transaction(env:aliceEnv, readOnly:false)
-//			let bobTrans = try Transaction(env:bobEnv, readOnly:false)
-//			
-//			#expect(try dbStatistics(tx: aliceTrans).ms_entries == db1Size + db2Size)
-//			#expect(try dbStatistics(tx: bobTrans).ms_entries == db1Size + db2Size)
-//			aliceTrans.commit()
-//			bobTrans.commit()
+			#expect(try aliceDB.dbStatistics(tx: aliceTrans).ms_entries == aliceSize)
+			#expect(try bobDB.dbStatistics(tx: bobTrans).ms_entries == bobSize)
+			try aliceTrans.commit()
+			try bobTrans.commit()
 		}
 		
-//		@Test func syncSameData() async throws {
-//			let db1Size = 100_000
-//			let db2Size = 100_000
-//			try initDB(db1Size: db1Size, db2Size:db2Size, random:false)
-//			#expect(try aliceDB.size() == db1Size)
-//			#expect(try bobDB.size() == db2Size)
-//			
-//			try sync()
-//			#expect(try aliceDB.size() == db1Size)
-//			#expect(try bobDB.size() == db2Size)
-//		}
-//		
-//		@Test func syncRandomDataRandomSize() async throws {
-//			let db1Size = 57295
-//			let db2Size = 1294
-//			try initDB(db1Size: db1Size, db2Size:db2Size, random:true)
-//			#expect(try aliceDB.size() == db1Size)
-//			#expect(try bobDB.size() == db2Size)
-//			
-//			try sync()
-//			#expect(try aliceDB.size() == db1Size + db2Size)
-//			#expect(try bobDB.size() == db1Size + db2Size)
-//		}
-//		
-//		@Test func syncWithEmptyDB() async throws {
-//			let db1Size = 0
-//			let db2Size = 0
-//			try initDB(db1Size: db1Size, db2Size:db2Size, random:true)
-//			#expect(try aliceDB.size() == db1Size)
-//			#expect(try bobDB.size() == db2Size)
-//			
-//			try sync()
-//			print(try aliceDB.size())
-//			print(try bobDB.size())
-//			#expect(try aliceDB.size() == db1Size + db2Size)
-//			#expect(try bobDB.size() == db1Size + db2Size)
-//		}
+		@Test mutating func syncRandomData() async throws {
+			let aliceSize = 10_000
+			let bobSize = 10_000
+			try addDBAlice(aliceDBSize: aliceSize, dbName: "testDB")
+			try addDBBob(bobDBSize: bobSize, dbName: "testDB")
+			
+			try await sync(oneWaySync: false)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: aliceSize + bobSize, bobSize: aliceSize + bobSize)
+		}
+		
+		@Test mutating func syncSameData() async throws {
+			let size = 100_000
+			try addIdenticalDBs(dbSize: size, dbName: "testDB")
+			
+			try await sync(oneWaySync: false)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: size, bobSize: size)
+		}
+		
+		@Test mutating func syncRandomDataDifferentDBSize() async throws {
+			let aliceSize = 57_832
+			let bobSize = 1_974
+			try addDBAlice(aliceDBSize: aliceSize, dbName: "testDB")
+			try addDBBob(bobDBSize: bobSize, dbName: "testDB")
+			
+			try await sync(oneWaySync: false)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: aliceSize + bobSize, bobSize: aliceSize + bobSize)
+		}
+		
+		@Test mutating func syncAllDBsWithMultipleDatabases() async throws {
+			let aliceSizeA = 1234
+			let bobSizeA = 1234
+			let aliceSizeB = 5678
+			let bobSizeB = 5678
+			try addDBAlice(aliceDBSize: aliceSizeA, dbName: "testDB_A")
+			try addDBBob(bobDBSize: bobSizeA, dbName: "testDB_A")
+			try addDBAlice(aliceDBSize: aliceSizeB, dbName: "testDB_B")
+			try addDBBob(bobDBSize: bobSizeB, dbName: "testDB_B")
+			
+			try await sync(oneWaySync: false)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: aliceSizeA + bobSizeA, bobSize: aliceSizeA + bobSizeA)
+			try checkSize(aliceDB: aliceDBs[1], bobDB: bobDBs[1], aliceSize: aliceSizeB + bobSizeB, bobSize: aliceSizeB + bobSizeB)
+		}
+		
+		@Test mutating func syncWithEmptyDB() async throws {
+			let aliceSizeA = 1234
+			let bobSizeA = 0
+			let aliceSizeB = 0
+			let bobSizeB = 5678
+			try addDBAlice(aliceDBSize: aliceSizeA, dbName: "testDB_A")
+			try addDBBob(bobDBSize: bobSizeA, dbName: "testDB_A")
+			try addDBAlice(aliceDBSize: aliceSizeB, dbName: "testDB_B")
+			try addDBBob(bobDBSize: bobSizeB, dbName: "testDB_B")
+			
+			try await sync(oneWaySync: false)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: aliceSizeA + bobSizeA, bobSize: aliceSizeA + bobSizeA)
+			try checkSize(aliceDB: aliceDBs[1], bobDB: bobDBs[1], aliceSize: aliceSizeB + bobSizeB, bobSize: aliceSizeB + bobSizeB)
+		}
+		
+		@Test mutating func syncRandomDataOneWay() async throws {
+			let aliceSize = 10_000
+			let bobSize = 10_000
+			try addDBAlice(aliceDBSize: aliceSize, dbName: "testDB")
+			try addDBBob(bobDBSize: bobSize, dbName: "testDB")
+			
+			try await sync(oneWaySync: true)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: aliceSize + bobSize, bobSize: bobSize)
+		}
 	}
 }

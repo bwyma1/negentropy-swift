@@ -7,7 +7,7 @@ import Logging
 import wireguard_userspace_nio
 
 extension NegentropyDatabase {
-	fileprivate func sync(channel:Channel, fifo:FIFO<ByteBuffer, Swift.Error>, publicKey:PublicKey, buckets:Int, tx:borrowing Transaction, cliLogger:Logger) throws {
+	fileprivate func sync(channel:Channel, fifo:FIFO<ByteBuffer, Swift.Error>, publicKey:PublicKey, buckets:Int, tx:borrowing Transaction, cliLogger:Logger, oneWaySync:Bool) throws {
 		var buffer = ByteBufferAllocator().buffer(capacity: MemoryLayout<MDB_db_key_type>.size)
 		
 		let msg = try initiate(buckets: buckets, tx: tx)
@@ -50,6 +50,7 @@ extension NegentropyDatabase {
 						var have = Set<MDB_db_key_type>()
 						var need = Set<MDB_db_key_type>()
 						let newMsg = try reconcile(query: verifiedData, haveIds: &have, needIds: &need, buckets: buckets, tx: tx)
+
 						allHave.formUnion(have)
 						allNeed.formUnion(need)
 						
@@ -58,17 +59,19 @@ extension NegentropyDatabase {
 						} else {
 							cliLogger.info("Negentropy messaging complete. Sending data/query messages.")
 							// Send all of the data for the ID's we have
-							for date in allHave {
-								_ = date.RAW_access { ptr in
-									buffer.writeBytes(ptr)
+							if(oneWaySync == false) {
+								for date in allHave {
+									_ = date.RAW_access { ptr in
+										buffer.writeBytes(ptr)
+									}
+									let value = try loadEntry(key: date, tx: tx)
+									_ = value.RAW_access { ptr in
+										buffer.writeBytes(ptr)
+									}
+									encodeNegentropyHeader(into: &buffer, type: .data)
+									try WGInterface<[UInt8]>.write(channel: channel, publicKey: publicKey, data: buffer)
+									buffer.clear(minimumCapacity: MemoryLayout<MDB_db_key_type>.size)
 								}
-								let value = try loadEntry(key: date, tx: tx)
-								_ = value.RAW_access { ptr in
-									buffer.writeBytes(ptr)
-								}
-								encodeNegentropyHeader(into: &buffer, type: .data)
-								try WGInterface<[UInt8]>.write(channel: channel, publicKey: publicKey, data: buffer)
-								buffer.clear(minimumCapacity: MemoryLayout<MDB_db_key_type>.size)
 							}
 							// Send data query messages for the ID's we need
 							breakCount = allNeed.count
@@ -116,26 +119,36 @@ public struct NegentropySyncThread:PThreadWork {
 	private let channel:Channel
 	private let fifo:FIFO<ByteBuffer, Swift.Error>
 	private let publicKey:PublicKey
+	private let oneWaySync:Bool
 	private let buckets:Int
 	private var cliLogger:Logger
 	
-	public init(_ env:consuming ([any NegentropyDatabase], Channel, FIFO<ByteBuffer, Swift.Error>, PublicKey)) {
+	public init(_ env:consuming ([any NegentropyDatabase], Channel, FIFO<ByteBuffer, Swift.Error>, PublicKey, Bool)) {
 		cliLogger = Logger(label: "ng.syncer")
 		cliLogger.logLevel = .debug
 		self.mdbDBArray = env.0
 		self.channel = env.1
 		self.fifo = env.2
 		self.publicKey = env.3
+		self.oneWaySync = env.4
 		self.buckets = 20
 	}
 	public func pthreadWork() throws -> Void {
 		guard mdbDBArray.count > 0 else { throw NegentropyError.noDatabases }
 		let env = mdbDBArray[0].dbEnvironment()
+		
+		var buffer = ByteBufferAllocator().buffer(capacity: 64)
+		for storage in mdbDBArray {
+			let dbSignature = storage.getDBSignature()
+			write(dbSignature: dbSignature, writeBuffer: &buffer)
+		}
+		try WGInterface<[UInt8]>.write(channel: channel, publicKey: publicKey, data: buffer)
+		
 		let syncTransaction = try Transaction(env:env, readOnly:false)
 		
 		// Syncing for ALL storages
 		for storage in mdbDBArray {
-			try storage.sync(channel: channel, fifo: fifo, publicKey: publicKey, buckets: buckets, tx: syncTransaction, cliLogger: cliLogger)
+			try storage.sync(channel: channel, fifo: fifo, publicKey: publicKey, buckets: buckets, tx: syncTransaction, cliLogger: cliLogger, oneWaySync:oneWaySync)
 		}
 		try syncTransaction.commit()
 	}

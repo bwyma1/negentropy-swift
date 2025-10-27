@@ -26,7 +26,12 @@ extension MDB_cursor_strict where MDB_cursor_dbtype.MDB_db_key_type:DatabaseInde
 
 	internal borrowing func findLowerBound(begin:UnsafePointer<MDB_val>, value:UnsafePointer<MDB_val>) throws -> MDB_val {
 		let last = try opLast(returning:(key:MDB_val, value:MDB_val).self).key
-		var first = try opSetRange(returning:(key:MDB_val, value:MDB_val).self, key:begin.pointee).key
+		var first = begin.pointee
+		do {
+			first = try opSetRange(returning:(key:MDB_val, value:MDB_val).self, key:begin.pointee).key
+		} catch {
+			return value.pointee
+		}
 		guard MDB_cursor_dbtype.MDB_db_key_type.MDB_compare_f(value, &first) > 0 else {
 			return first
 		}

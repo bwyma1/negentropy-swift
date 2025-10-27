@@ -5,10 +5,10 @@ import QuickLMDB
 
 // encode bound
 internal func write<K>(bound:borrowing Bound<K>, writeBuffer:inout ByteBuffer) where K:DatabaseIndexVector {
-	let expectedSize = MemoryLayout<K>.size
+	let expectedSize = bound.length
 	writeBuffer.writeInteger(UInt8(expectedSize), as:UInt8.self)
-	bound.identifier.RAW_access {
-		_ = writeBuffer.writeBytes($0)
+	bound.identifier.RAW_access { ptr in
+		_ = writeBuffer.writeBytes(ptr.prefix(Int(expectedSize)))
 	}
 }
 // encode fingerprint
@@ -34,4 +34,10 @@ internal func write(mode:Mode, writeBuffer:inout ByteBuffer) {
 
 internal func write(numElements:Int, writeBuffer:inout ByteBuffer) {
 	writeBuffer.writeInteger(numElements)
+}
+
+internal func write(dbSignature:String, writeBuffer:inout ByteBuffer) {
+	let len = EncodedUInt64(RAW_native: UInt64(dbSignature.count))
+	writeBuffer.writeInteger(len.RAW_native())
+	writeBuffer.writeString(dbSignature)
 }

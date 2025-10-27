@@ -6,9 +6,6 @@ import NIO
 import Logging
 import wireguard_userspace_nio
 
-public protocol NegentropyDatabase:MDB_db_strict, Sendable where Self.MDB_db_key_type:DatabaseIndexVector {}
-extension Database.Strict: NegentropyDatabase where Self.MDB_db_key_type:DatabaseIndexVector {}
-
 extension NegentropyDatabase {
 	fileprivate func listen(channel:Channel, fifo:FIFO<ByteBuffer, Swift.Error>, publicKey:PublicKey, buckets:Int, tx:borrowing Transaction, cliLogger:Logger) throws {
 		var buffer = ByteBufferAllocator().buffer(capacity: MemoryLayout<MDB_db_key_type>.size)
@@ -87,16 +84,18 @@ public struct NegentropyListenThread:PThreadWork {
 	private let channel:Channel
 	private let fifo:FIFO<ByteBuffer, Swift.Error>
 	private let publicKey:PublicKey
+	private var dbSignatures:ByteBuffer
 	private let buckets:Int
 	private var cliLogger:Logger
 	
-	public init(_ env:consuming ([any NegentropyDatabase], Channel, FIFO<ByteBuffer, Swift.Error>, PublicKey)) {
-		cliLogger = Logger(label: "ng.syncer")
+	public init(_ env:consuming ([any NegentropyDatabase], Channel, FIFO<ByteBuffer, Swift.Error>, PublicKey, ByteBuffer)) {
+		cliLogger = Logger(label: "ng.listener")
 		cliLogger.logLevel = .debug
 		self.mdbDBArray = env.0
 		self.channel = env.1
 		self.fifo = env.2
 		self.publicKey = env.3
+		self.dbSignatures = env.4
 		self.buckets = 20
 	}
 	public func pthreadWork() throws -> Void {
@@ -104,8 +103,24 @@ public struct NegentropyListenThread:PThreadWork {
 		let env = mdbDBArray[0].dbEnvironment()
 		let syncTransaction = try Transaction(env:env, readOnly:false)
 		
+		var sortedMDBArray:[any NegentropyDatabase] = []
+		var dbSignatures = self.dbSignatures
+		while dbSignatures.readableBytes > 0 {
+			guard let signatureLength = dbSignatures.readInteger(endianness:.big, as:EncodedUInt64.RAW_native_type.self) else {
+				throw InternalFatalError()
+			}
+			if let signature = dbSignatures.readString(length: Int(signatureLength)) {
+				for storage in mdbDBArray {
+					if(storage.getDBSignature() == signature) {
+						sortedMDBArray.append(storage)
+						break
+					}
+				}
+			}
+		}
+		
 		// Syncing for ALL storages
-		for storage in mdbDBArray {
+		for storage in sortedMDBArray {
 			// put into a fileprivate extension
 			try storage.listen(channel: channel, fifo: fifo, publicKey: publicKey, buckets: buckets, tx: syncTransaction, cliLogger: cliLogger)
 		}

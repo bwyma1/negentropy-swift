@@ -1,7 +1,7 @@
 import RAW
 import NIO
 
-enum MessageType:UInt8 {
+internal enum MessageType:UInt8 {
 	case initiator = 0
 	case responder = 1
 	case dataQuery = 2
@@ -9,7 +9,7 @@ enum MessageType:UInt8 {
 	case finish = 4
 }
 
-struct NegentropyData {
+internal struct NegentropyData {
 	let magicNumber:NegentropyMagicNumber
 	let type:MessageType
 	var data:ByteBuffer
@@ -61,5 +61,13 @@ extension NegentropyData {
 		headerData.writeBytes([type.rawValue])
 		headerData.writeBuffer(&data)
 		return headerData
+	}
+}
+
+// MARK: Encode Header
+extension NegentropyDatabase {
+	internal func encodeNegentropyHeader(into data: inout ByteBuffer, type: MessageType) {
+		var negData = NegentropyData(type: type, data: data)
+		data = negData.encode()
 	}
 }

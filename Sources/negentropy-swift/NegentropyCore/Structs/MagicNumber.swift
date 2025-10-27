@@ -1,7 +1,7 @@
 import RAW
 
 @RAW_staticbuff(bytes: 4)
-struct NegentropyMagicNumber:Sendable {
+internal struct NegentropyMagicNumber:Sendable {
 	init() {
 		let magicBytes = Array("NEGT".utf8)
 		self = Self(RAW_staticbuff:magicBytes)
