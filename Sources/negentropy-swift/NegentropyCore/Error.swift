@@ -12,4 +12,14 @@ internal enum NegentropyError: Error {
 	
 	// Storage Errors
 	case duplicateItemsInStorage
+	
+	// Header errors
+	case expectedNonInitiatorMessage
+	case expectedNonResponderMessage
+	case expectedNegentropyData
+	
+	// Sync thread
+	case noDatabases
+	case undecodableIdentifier
+	case undecodableValue
 }

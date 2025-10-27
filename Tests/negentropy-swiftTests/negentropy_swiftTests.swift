@@ -1,236 +1,265 @@
 import Testing
 import RAW
-@testable import negentropy_swift
+import class Foundation.FileManager
+import Logging
+import QuickLMDB
+import bedrock
+import RAW_base64
+import RAW_dh25519
+import wireguard_userspace_nio
+import bedrock_fifo
+import NIO
+import negentropy_swift
 
-@Suite("VectorStorage Tests", .serialized)
-struct VectorStorageTests {
-	@Test func testSort() async throws {
-		var vecA = VectorStorage()
-		// Add unique items
-		for i in 0..<40_000 {
-			let id1:ID = try generateSecureRandomBytes(as: ID.self)
-			let item1 = try Item(timestamp: UInt64(i+1001), id: id1)
-			vecA.insertItem(item1)
-		}
-		try vecA.sort()
-	}
-}
+@RAW_staticbuff(bytes: 8)
+@RAW_staticbuff_fixedwidthinteger_type<UInt64>(bigEndian: true)
+public struct Data: Sendable, Equatable, Comparable {}
 
 @Suite("Negentropy Swift Tests", .serialized)
 struct NegentropySwiftTests {}
 
+@RAW_staticbuff(bytes: 8)
+@RAW_staticbuff_fixedwidthinteger_type<UInt64>(bigEndian: true)
+@MDB_comparable
+public struct TestingID: Sendable, DatabaseIndexVector {}
+
 extension NegentropySwiftTests {
-	@Suite("Negentropy Encoding Tests",
+	@Suite("Negentropy LMDB Tests",
 		   .serialized
 	)
-	struct EncodingTests {
-		@Test func encodeDecodeBound() async throws {
-			let id:ID = try generateSecureRandomBytes(as: ID.self)
-			let item = try Item(timestamp: UInt64(100), id: id)
-			let bound = Bound(item: item)
-			
-			let vecA = VectorStorage()
-			
-			var ne1 = try Negentropy(storage: vecA, frameSizeLimit: 20_000)
-			
-			var encoded = ne1.encodeBound(bound)
-			
-			let decoded = try ne1.decodeBound(encoded: &encoded)
-			
-			#expect(decoded == bound)
-		}
-	}
+	struct LMDBExtensionTests { }
 }
 
 extension NegentropySwiftTests {
-	@Suite("Live Data Tests",
+	@Suite("Negentropy Live LMDB Tests",
 		   .serialized
 	)
-	struct LiveDataTests{
+	struct LiveNegentropyTests {
 		
-		// Helper sync function for testing storages
-		func sync(storageA:inout VectorStorage, storageB:inout VectorStorage) throws {
-			try storageA.sort()
-			try storageB.sort()
-			
-			var ne1 = try Negentropy(storage: storageA, frameSizeLimit: 20_000)
-			var ne2 = try Negentropy(storage: storageB, frameSizeLimit: 20_000)
-			
-			var msg = try ne1.initiate()
+		private let logger:Logger
+		private let aliceEnv:Environment
+		private var aliceDBs:[Database.Strict<TestingID, Data>] = []
+		
+		private let bobEnv:Environment
+		private var bobDBs:[Database.Strict<TestingID, Data>] = []
+		
+		static let aliceStaticPrivateKey = MemoryGuarded<PrivateKey>(RAW_decode:try! RAW_base64.decode("8DFnI7tPWLl4WmuEp4T5KVuKMW6iyjRdTb3IVaDe+kI="), count:32)!
+		static let bobStaticPrivateKey = MemoryGuarded<PrivateKey>(RAW_decode:try! RAW_base64.decode("SD/y8yQa/DgiYRnDI9vJEiGezNn4yLd/4yL9OLnej0A="), count:32)!
 
-			while(true) {
-				msg = try ne2.reconcile(query: msg)
-				
-				var have:[ID] = []
-				var need:[ID] = []
-				let newMsg = try ne1.reconcile(query: msg, haveIds: &have, needIds: &need)
-				
-				for id in need {
-					// Find the item for the id and insert into the other vector
-					if let item = storageB.itemFor(id: id) {
-						storageA.insertItem(item)
+		let alicePublicKey:PublicKey
+		let alicePrivateKey:MemoryGuarded<PrivateKey>
+		
+		let bobPublicKey:PublicKey
+		let bobPrivateKey:MemoryGuarded<PrivateKey>
+		
+		init() throws {
+			let base = Path(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop").path)
+			var finalPath = base.appendingPathComponent("aliceDB.mdb")
+			let memoryMapSize = size_t(finalPath.getFileSize() + 5 * 1024 * 1024 * 1024) // add 5mb to the file
+			aliceEnv = try Environment(path:finalPath.path(), flags:[.noSubDir], mapSize:memoryMapSize, maxReaders:16, maxDBs:3, mode:[.ownerReadWriteExecute, .groupReadExecute, .otherReadExecute])
+			
+			finalPath = base.appendingPathComponent("bobDB.mdb")
+			bobEnv = try Environment(path:finalPath.path(), flags:[.noSubDir], mapSize:memoryMapSize, maxReaders:16, maxDBs:3, mode:[.ownerReadWriteExecute, .groupReadExecute, .otherReadExecute])
+			
+			var makelogger = Logger(label: "negentropy-swift-tests")
+			makelogger.logLevel = .notice
+			logger = makelogger
+			
+			(alicePublicKey, alicePrivateKey) = (PublicKey(privateKey:Self.aliceStaticPrivateKey), Self.aliceStaticPrivateKey)
+			(bobPublicKey, bobPrivateKey) = (PublicKey(privateKey:Self.bobStaticPrivateKey), Self.bobStaticPrivateKey)
+		}
+		
+		func logID(id:TestingID) {
+			id.RAW_access({ptr in
+				logger.trace("\(Array(UnsafeBufferPointer(start: ptr.baseAddress!, count: ptr.count)))")
+			})
+		}
+		
+		mutating func addDBAlice(aliceDBSize:Int, dbName:String) throws {
+			let newTrans = try Transaction(env:aliceEnv, readOnly:false)
+
+			let aliceDB = try! Database.Strict<TestingID, Data>(env:aliceEnv, name:dbName, flags:[.create], tx:newTrans)
+			try aliceDB.deleteAllEntries(tx:newTrans)
+			
+			try aliceDB.cursor(tx:newTrans) { cursor in
+				for i in 0..<aliceDBSize {
+					let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+					logID(id: id)
+					try cursor.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
+				}
+			}
+			
+			try newTrans.commit()
+			aliceDBs.append(aliceDB)
+		}
+		
+		mutating func addDBBob(bobDBSize:Int, dbName:String) throws {
+			let newTrans = try Transaction(env:bobEnv, readOnly:false)
+			let bobDB = try! Database.Strict<TestingID, Data>(env:bobEnv, name:dbName, flags:[.create], tx:newTrans)
+			try bobDB.deleteAllEntries(tx:newTrans)
+			
+			try bobDB.cursor(tx:newTrans) { cursor in
+				for i in 0..<bobDBSize {
+					let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+					logID(id: id)
+					try cursor.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
+				}
+			}
+			
+			try newTrans.commit()
+			bobDBs.append(bobDB)
+		}
+		
+		mutating func addIdenticalDBs(dbSize:Int, dbName:String) throws {
+			let newTrans1 = try Transaction(env:aliceEnv, readOnly:false)
+			let newTrans2 = try Transaction(env:bobEnv, readOnly:false)
+			let aliceDB = try! Database.Strict<TestingID, Data>(env:aliceEnv, name:dbName, flags:[.create], tx:newTrans1)
+			try aliceDB.deleteAllEntries(tx:newTrans1)
+			let bobDB = try! Database.Strict<TestingID, Data>(env:bobEnv, name:dbName, flags:[.create], tx:newTrans2)
+			try bobDB.deleteAllEntries(tx:newTrans2)
+			
+			try aliceDB.deleteAllEntries(tx:newTrans1)
+			try bobDB.deleteAllEntries(tx:newTrans2)
+			try aliceDB.cursor(tx:newTrans1) { cursor1 in
+				try aliceDB.cursor(tx:newTrans2) { cursor2 in
+					for i in 0..<dbSize {
+						// Make key
+						let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+						logID(id: id)
+						try cursor1.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
+						try cursor2.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
 					}
 				}
+			}
+
+			try newTrans1.commit()
+			try newTrans2.commit()
+			aliceDBs.append(aliceDB)
+			bobDBs.append(bobDB)
+		}
+		
+//	    Helper sync function for testing storages
+		func sync(oneWaySync:Bool) async throws {
+			
+			_ = try await withThrowingTaskGroup(body: { foo in
+				let bobFifo = FIFO<ByteBuffer, Swift.Error>()
+				let alicePeers = [(PeerInfo(publicKey: bobPublicKey, ipAddress: "127.0.0.1", port: 36000, internalKeepAlive: .seconds(20)), bobFifo)]
+				let aliceInterface = try WGInterface<[UInt8]>(staticPrivateKey:alicePrivateKey, mtu:1400, initialConfiguration:alicePeers, logLevel:.info, listeningPort: 36001)
 				
-				for id in have {
-					if let item = storageA.itemFor(id: id) {
-						storageB.insertItem(item)
-					}
+				let aliceFifo = FIFO<ByteBuffer, Swift.Error>()
+				let bobPeers = [(PeerInfo(publicKey: alicePublicKey, ipAddress: "127.0.0.1", port: 36001, internalKeepAlive: .seconds(20)), aliceFifo)]
+				let bobInterface = try WGInterface<[UInt8]>(staticPrivateKey:bobPrivateKey, mtu:1400, initialConfiguration:bobPeers, logLevel:.info, listeningPort: 36000)
+				
+				foo.addTask {
+					try await aliceInterface.run()
+				}
+				foo.addTask {
+					try await bobInterface.run()
 				}
 				
-				if(newMsg == nil) { break }
-				else { msg = newMsg! }
-			}
-			
-			try storageA.sort()
-			try storageB.sort()
-		}
-		
-		@Test func testWithSameData() async throws {
-			var vecA = VectorStorage()
-			var vecB = VectorStorage()
-			for i in 0..<1000 {
-				let id:ID = try generateSecureRandomBytes(as: ID.self)
-				let item = try Item(timestamp: UInt64(i+1), id: id)
-				vecA.insertItem(item)
-				vecB.insertItem(item)
-			}
-			
-			try vecA.sort()
-			try vecB.sort()
-			
-			var ne1 = try Negentropy(storage: vecA, frameSizeLimit: 20_000)
-			var ne2 = try Negentropy(storage: vecB, frameSizeLimit: 20_000)
-			
-			var msg = try ne1.initiate()
-			
-			while(true) {
-				msg = try ne2.reconcile(query: msg)
+				logger.info("waiting for alice's interface to initialize...")
+				try await aliceInterface.waitForChannelInit()
 				
-				var have:[ID] = []
-				var need:[ID] = []
-				let newMsg = try ne1.reconcile(query: msg, haveIds: &have, needIds: &need)
+				logger.info("waiting for bob's interface to initialize...")
+				try await bobInterface.waitForChannelInit()
 				
-				#expect(have.count == 0)
-				#expect(need.count == 0)
+				let syncThread = await NegentropySyncThread((aliceDBs, try aliceInterface.getChannel(), bobFifo, bobPublicKey, oneWaySync:oneWaySync))
 				
-				if(newMsg == nil) { break }
-				else { msg = newMsg! }
-			}
-		}
-		
-		@Test func testWithDifferentData() async throws {
-			var vecA = VectorStorage()
-			var vecB = VectorStorage()
-			for i in 0..<1000 {
-				let id1:ID = try generateSecureRandomBytes(as: ID.self)
-				let item1 = try Item(timestamp: UInt64(i+1), id: id1)
-				vecA.insertItem(item1)
-				let id2:ID = try generateSecureRandomBytes(as: ID.self)
-				let item2 = try Item(timestamp: UInt64(i+1), id: id2)
-				vecB.insertItem(item2)
-			}
-			
-			try sync(storageA: &vecA, storageB: &vecB)
-			
-			#expect(vecA.size() == vecB.size())
-			#expect(vecA.size() == 2000)
-			for i in 0..<vecA.size() {
-				#expect(vecA.getItem(i) == vecB.getItem(i))
-			}
-		}
-		
-		@Test func testWithPartialDataDifferences() async throws {
-			var vecA = VectorStorage()
-			var vecB = VectorStorage()
-			// Same items
-			for i in 0..<1000 {
-				let id:ID = try generateSecureRandomBytes(as: ID.self)
-				let item = try Item(timestamp: UInt64(i+1), id: id)
-				vecA.insertItem(item)
-				vecB.insertItem(item)
-			}
-			// Different items
-			for i in 0..<1000 {
-				let id1:ID = try generateSecureRandomBytes(as: ID.self)
-				let item1 = try Item(timestamp: UInt64(i+1001), id: id1)
-				vecA.insertItem(item1)
-				let id2:ID = try generateSecureRandomBytes(as: ID.self)
-				let item2 = try Item(timestamp: UInt64(i+1001), id: id2)
-				vecB.insertItem(item2)
-			}
-			// Same items
-			for i in 0..<1000 {
-				let id:ID = try generateSecureRandomBytes(as: ID.self)
-				let item = try Item(timestamp: UInt64(i+2001), id: id)
-				vecA.insertItem(item)
-				vecB.insertItem(item)
-			}
-			
-			try sync(storageA: &vecA, storageB: &vecB)
-			
-			#expect(vecA.size() == vecB.size())
-			#expect(vecA.size() == 4000)
-			for i in 0..<vecA.size() {
-				#expect(vecA.getItem(i) == vecB.getItem(i))
-			}
-		}
-		
-		@Test func testWithDuplicateTimestamps() async throws {
-			var vecA = VectorStorage()
-			var vecB = VectorStorage()
-			for i in 0..<100 {
-				let id1:ID = try generateSecureRandomBytes(as: ID.self)
-				let item1 = try Item(timestamp: UInt64(i+1), id: id1)
-				vecA.insertItem(item1)
-				let id2:ID = try generateSecureRandomBytes(as: ID.self)
-				let item2 = try Item(timestamp: UInt64(i+1), id: id2)
-				vecB.insertItem(item2)
-			}
-			// Another set of items with the same timestamps as the previous set
-			for i in 0..<100 {
-				let id1:ID = try generateSecureRandomBytes(as: ID.self)
-				let item1 = try Item(timestamp: UInt64(i+1), id: id1)
-				vecA.insertItem(item1)
-				let id2:ID = try generateSecureRandomBytes(as: ID.self)
-				let item2 = try Item(timestamp: UInt64(i+1), id: id2)
-				vecB.insertItem(item2)
-			}
-			
-			try sync(storageA: &vecA, storageB: &vecB)
-			
-			#expect(vecA.size() == vecB.size())
-			for i in 0..<vecA.size() {
-				#expect(vecA.getItem(i) == vecB.getItem(i))
-			}
-		}
-		
-		@Test func testWithLargerStorages() async throws {
-			var vecA = VectorStorage()
-			var vecB = VectorStorage()
-			// ~10% of the data is different
-			for i in 0..<20_000 {
-				if Double.random(in: 0..<1) < 0.1 {
-					let id1:ID = try generateSecureRandomBytes(as: ID.self)
-					let item1 = try Item(timestamp: UInt64(i+1), id: id1)
-					vecA.insertItem(item1)
-					let id2:ID = try generateSecureRandomBytes(as: ID.self)
-					let item2 = try Item(timestamp: UInt64(i+1), id: id2)
-					vecB.insertItem(item2)
-				} else {
-					let id:ID = try generateSecureRandomBytes(as: ID.self)
-					let item = try Item(timestamp: UInt64(i+1), id: id)
-					vecA.insertItem(item)
-					vecB.insertItem(item)
+				
+				
+				foo.addTask {
+					try syncThread.pthreadWork()
 				}
-			}
+				
+				let iterator = aliceFifo.makeSyncConsumerBlocking()
+				// Wait to listener initiation
+				if let incomingData = try iterator.next() {
+					let listenThread = await NegentropyListenThread((bobDBs, try bobInterface.getChannel(), aliceFifo, alicePublicKey, incomingData))
+					try listenThread.pthreadWork()
+				}
+				
+				foo.cancelAll()
+				try await foo.waitForAll()
+				return
+			})
+		}
+		
+		func checkSize(aliceDB:Database.Strict<TestingID, Data>, bobDB:Database.Strict<TestingID, Data>, aliceSize:Int, bobSize:Int) throws  {
+			let aliceTrans = try Transaction(env:aliceEnv, readOnly:false)
+			let bobTrans = try Transaction(env:bobEnv, readOnly:false)
 			
-			try sync(storageA: &vecA, storageB: &vecB)
+			#expect(try aliceDB.dbStatistics(tx: aliceTrans).ms_entries == aliceSize)
+			#expect(try bobDB.dbStatistics(tx: bobTrans).ms_entries == bobSize)
+			try aliceTrans.commit()
+			try bobTrans.commit()
+		}
+		
+		@Test mutating func syncRandomData() async throws {
+			let aliceSize = 10_000
+			let bobSize = 10_000
+			try addDBAlice(aliceDBSize: aliceSize, dbName: "testDB")
+			try addDBBob(bobDBSize: bobSize, dbName: "testDB")
 			
-			#expect(vecA.size() == vecB.size())
-			for i in 0..<vecA.size() {
-				#expect(vecA.getItem(i) == vecB.getItem(i))
-			}
+			try await sync(oneWaySync: false)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: aliceSize + bobSize, bobSize: aliceSize + bobSize)
+		}
+		
+		@Test mutating func syncSameData() async throws {
+			let size = 100_000
+			try addIdenticalDBs(dbSize: size, dbName: "testDB")
+			
+			try await sync(oneWaySync: false)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: size, bobSize: size)
+		}
+		
+		@Test mutating func syncRandomDataDifferentDBSize() async throws {
+			let aliceSize = 57_832
+			let bobSize = 1_974
+			try addDBAlice(aliceDBSize: aliceSize, dbName: "testDB")
+			try addDBBob(bobDBSize: bobSize, dbName: "testDB")
+			
+			try await sync(oneWaySync: false)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: aliceSize + bobSize, bobSize: aliceSize + bobSize)
+		}
+		
+		@Test mutating func syncAllDBsWithMultipleDatabases() async throws {
+			let aliceSizeA = 1234
+			let bobSizeA = 1234
+			let aliceSizeB = 5678
+			let bobSizeB = 5678
+			try addDBAlice(aliceDBSize: aliceSizeA, dbName: "testDB_A")
+			try addDBBob(bobDBSize: bobSizeA, dbName: "testDB_A")
+			try addDBAlice(aliceDBSize: aliceSizeB, dbName: "testDB_B")
+			try addDBBob(bobDBSize: bobSizeB, dbName: "testDB_B")
+			
+			try await sync(oneWaySync: false)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: aliceSizeA + bobSizeA, bobSize: aliceSizeA + bobSizeA)
+			try checkSize(aliceDB: aliceDBs[1], bobDB: bobDBs[1], aliceSize: aliceSizeB + bobSizeB, bobSize: aliceSizeB + bobSizeB)
+		}
+		
+		@Test mutating func syncWithEmptyDB() async throws {
+			let aliceSizeA = 1234
+			let bobSizeA = 0
+			let aliceSizeB = 0
+			let bobSizeB = 5678
+			try addDBAlice(aliceDBSize: aliceSizeA, dbName: "testDB_A")
+			try addDBBob(bobDBSize: bobSizeA, dbName: "testDB_A")
+			try addDBAlice(aliceDBSize: aliceSizeB, dbName: "testDB_B")
+			try addDBBob(bobDBSize: bobSizeB, dbName: "testDB_B")
+			
+			try await sync(oneWaySync: false)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: aliceSizeA + bobSizeA, bobSize: aliceSizeA + bobSizeA)
+			try checkSize(aliceDB: aliceDBs[1], bobDB: bobDBs[1], aliceSize: aliceSizeB + bobSizeB, bobSize: aliceSizeB + bobSizeB)
+		}
+		
+		@Test mutating func syncRandomDataOneWay() async throws {
+			let aliceSize = 10_000
+			let bobSize = 10_000
+			try addDBAlice(aliceDBSize: aliceSize, dbName: "testDB")
+			try addDBBob(bobDBSize: bobSize, dbName: "testDB")
+			
+			try await sync(oneWaySync: true)
+			try checkSize(aliceDB: aliceDBs[0], bobDB: bobDBs[0], aliceSize: aliceSize + bobSize, bobSize: bobSize)
 		}
 	}
 }
