@@ -65,6 +65,13 @@ extension NegentropyData {
 }
 
 // MARK: Encode Header
+extension NegentropyDatabaseStrict {
+	internal func encodeNegentropyHeader(into data: inout ByteBuffer, type: MessageType) {
+		var negData = NegentropyData(type: type, data: data)
+		data = negData.encode()
+	}
+}
+
 extension NegentropyDatabase {
 	internal func encodeNegentropyHeader(into data: inout ByteBuffer, type: MessageType) {
 		var negData = NegentropyData(type: type, data: data)

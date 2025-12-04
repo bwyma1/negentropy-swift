@@ -1,5 +1,5 @@
 {
-  "originHash" : "bca91df32ab30cd08ccd404ccc5f140e675d53489a8ca0e688bd07262df021ad",
+  "originHash" : "3f4afbf97bdaf1f64b799e1778fe956fc0f09bc3748c661e1b8fece38d0b0740",
   "pins" : [
     {
       "identity" : "bedrock",
@@ -77,8 +77,8 @@
       "kind" : "remoteSourceControl",
       "location" : "http://github.com/apple/swift-nio.git",
       "state" : {
-        "revision" : "4e8f4b1c9adaa59315c523540c1ff2b38adc20a9",
-        "version" : "2.87.0"
+        "revision" : "663ddc80f2081c8f22e417cbac5f80270a93795e",
+        "version" : "2.91.0"
       }
     },
     {
@@ -113,7 +113,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tannerdsilva/wireguard-swift",
       "state" : {
-        "revision" : "e27b8dc8e80b8157d6bb31cf107e858ff90a484e"
+        "revision" : "082c17b60c4a31b13fb0c36bba921953f47ae22f"
       }
     }
   ],
