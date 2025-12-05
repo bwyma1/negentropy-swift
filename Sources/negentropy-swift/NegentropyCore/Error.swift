@@ -1,18 +1,5 @@
 
-internal enum NegentropyError: Error {
-	// Negentropy errors
-	case frameSizeTooSmall
-	case unexpectedMode
-	case wrongInitiator
-	
-	// Type/Encoding Errors
-	case badIDSize
-	case prematureEndOfVarInt
-	case parseEndsPrematurely
-	
-	// Storage Errors
-	case duplicateItemsInStorage
-	
+internal enum NegentropyError: Error {	
 	// Header errors
 	case expectedNonInitiatorMessage
 	case expectedNonResponderMessage
@@ -20,6 +7,6 @@ internal enum NegentropyError: Error {
 	
 	// Sync thread
 	case noDatabases
-	case undecodableIdentifier
-	case undecodableValue
+	case undecodableMDBKey
+	case undecodableMDBValue
 }

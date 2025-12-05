@@ -3,6 +3,7 @@ import NIO
 import QuickLMDB
 
 extension NegentropyDatabaseStrict {
+	/// Returns the a unique signature string for this database.
 	internal func getDBSignature() -> String {
 		var ret = ""
 		if(dbName() != nil) {
@@ -14,6 +15,8 @@ extension NegentropyDatabaseStrict {
 		return ret
 	}
 	
+	/// Creates the first Negentropy initiation message.
+	/// Only called once by the pthread sync function per database sync.
 	internal func initiate(buckets:Int, tx:borrowing Transaction) throws -> ByteBuffer  {
 		var returnBuffer = ByteBufferAllocator().buffer(capacity: 0)
 		
@@ -31,6 +34,7 @@ extension NegentropyDatabaseStrict {
 		return returnBuffer
 	}
 	
+	/// Reconcile function called by the listener pthread.
 	internal func reconcile(query: consuming ByteBuffer, buckets:Int, tx:borrowing Transaction) throws -> ByteBuffer {
 		var returnBuffer = ByteBufferAllocator().buffer(capacity: 5)
 		var haveIds = Set<MDB_db_key_type>()
@@ -46,7 +50,7 @@ extension NegentropyDatabaseStrict {
 		return returnBuffer
 	}
 	
-	
+	/// Reconcile function called by the sync pthread.
 	internal func reconcile(query: consuming ByteBuffer, haveIds: inout Set<MDB_db_key_type>, needIds: inout Set<MDB_db_key_type>, buckets:Int, tx:borrowing Transaction) throws -> ByteBuffer? {
 		var returnBuffer = ByteBufferAllocator().buffer(capacity: 5)
 		try cursor(tx: tx) { cursor in

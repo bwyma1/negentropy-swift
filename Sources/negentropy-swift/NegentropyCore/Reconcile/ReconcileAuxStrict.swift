@@ -24,6 +24,11 @@ extension NegentropyDatabaseStrict {
 }
 
 extension NegentropyDatabaseStrict {
+	/// Decodes the incoming message.
+	/// Encodes into a return message buffer according to the received message's mode.
+	/// - `.skip`: Proceeds to the next bound, this one matches the peer.
+	/// - `.fingerprint`: Checks if our fingerprint matches the peer's fingerprint. If not, then splitrange(). If yes, then skip.
+	/// - `.idList`: If initiator, update have/need IDs. If not, then send over IDs.
 	internal func reconcileAux(isInitiator:Bool, buckets:Int, queryBuffer:inout ByteBuffer, returnBuffer: inout ByteBuffer, haveIDs:inout Set<MDB_db_key_type>, needIDs:inout Set<MDB_db_key_type>, cursor:consuming MDB_db_cursor_type, tx:borrowing Transaction) throws {
 		guard buckets > 0 else {
 			fatalError("fatal developer usage error in \(#function) - `buckets` must be greater than 0 - \(#file):\(#line)")
@@ -115,6 +120,7 @@ extension NegentropyDatabaseStrict {
 		}
 	}
 	
+	/// Primary zero length database reconcile function.
 	internal func reconcileAuxZeroDB(isInitiator:Bool, buckets:Int, queryBuffer:inout ByteBuffer, returnBuffer: inout ByteBuffer, haveIDs:inout Set<MDB_db_key_type>, needIDs:inout Set<MDB_db_key_type>, cursor:consuming MDB_db_cursor_type, tx:borrowing Transaction) throws {
 		guard buckets > 0 else {
 			fatalError("fatal developer usage error in \(#function) - `buckets` must be greater than 0 - \(#file):\(#line)")
@@ -184,6 +190,11 @@ extension NegentropyDatabaseStrict {
 }
 
 extension NegentropyDatabaseStrict{
+	/// Encodes the part of the Negentropy response message for the section of the database between [lower, upper).
+	/// If the numeber of database elements is lower than the bucket size then encode the following into the response buffer:
+	/// - | upperBound | idList (0x2) | numIds (i.e. 20) | ID1 | ID2 | ... | ID20 |
+	///If the numeber of database elements is greater than the bucket size then encode the following into the response buffer for each bucket:
+	/// - | Bound (last id this bucket, next bucket first id) | fingerprintMode (0x1) | Fingerprint |
 	internal func splitRange(buckets:Int, returnBuffer: inout ByteBuffer, lower:UnsafePointer<MDB_val>, upper:UnsafePointer<MDB_val>?, upperBound:Bound<MDB_db_key_type>, cursor: MDB_db_cursor_type) throws {
 		func getMinimalBound(prev:MDB_val, cur:MDB_val) -> Bound<MDB_db_key_type> {
 			var sharedPrefixBytes:UInt8 = 0

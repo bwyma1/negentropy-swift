@@ -267,7 +267,12 @@ extension NegentropySwiftTests {
 			bobStrictDBs.append(bobDB)
 		}
 		
-//	    Helper sync function for testing storages
+		/// The primary way to sync databases using the listen and sync threads.
+		/// - `Create WireGuard Interfaces`: Create the WireGuard interfaces which will be used to transfer the data.
+		/// - `Create Sync Thread`: Create the sync thread on the initiators side. Add the strict/basic databases. Pass in the WireGaurd channel, data Fifo, and peer public key. Add/remove one-way sync.
+		/// 	- Run the sync thread. When the sync thread finishes running, the sync is complete.
+		/// - `Listen Thread`: Capture the first piece of incoming data (the database signatures to sync). Then create the listen thread on the responders side. Add the strict/basic databases. Pass in the WireGaurd channel, data Fifo, and peer public key.
+		///  	- Run the listen thread. When the listen thread finishes running, the sync is complete.
 		func sync(oneWaySync:Bool) async throws {
 			
 			_ = try await withThrowingTaskGroup(body: { foo in

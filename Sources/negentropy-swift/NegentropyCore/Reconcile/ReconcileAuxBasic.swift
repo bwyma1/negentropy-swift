@@ -4,6 +4,8 @@ import QuickLMDB
 import NIO
 import Logging
 
+// See ReconcileAuxStrict for documentation
+
 extension NegentropyDatabase {
 	private func doSkip(_ skip:inout Bool, _ prevBound:MDB_val, returnBuffer:inout ByteBuffer) {
 		if skip {

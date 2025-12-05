@@ -2,6 +2,8 @@ import RAW
 import NIO
 import QuickLMDB
 
+// See ReconcileStrict for documentation
+
 extension NegentropyDatabase {
 	internal func getDBSignature() -> String {
 		var ret = ""

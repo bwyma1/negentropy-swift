@@ -1,6 +1,7 @@
 import QuickLMDB
 
 extension MDB_cursor_basic {
+	/// Finds and returns the first item after begin such that `value < item.key`
 	internal borrowing func findLowerBound(begin:UnsafePointer<MDB_val>, value:UnsafePointer<MDB_val>) throws -> MDB_val {
 		let last = try opLast(returning:(key:MDB_val, value:MDB_val).self).key
 		var first = begin.pointee
@@ -26,6 +27,7 @@ extension MDB_cursor_basic {
 }
 
 extension MDB_cursor_strict where MDB_cursor_dbtype.MDB_db_key_type:DatabaseIndexVector {
+	/// Finds and returns the first item after begin such that `value < item.key`
 	internal borrowing func findLowerBound(begin:UnsafePointer<MDB_val>, value:UnsafePointer<MDB_val>) throws -> MDB_val {
 		let last = try opLast(returning:(key:MDB_val, value:MDB_val).self).key
 		var first = begin.pointee

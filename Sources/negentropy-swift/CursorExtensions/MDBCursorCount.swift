@@ -1,6 +1,7 @@
 import QuickLMDB
 
 extension MDB_cursor_basic {
+	/// Counts the number of items in the set [begin, opLast]
 	internal borrowing func countEntries(begin:UnsafePointer<MDB_val>) throws -> Int {
 		var count = 0
 		do {
@@ -14,6 +15,7 @@ extension MDB_cursor_basic {
 			return count
 		}
 	}
+	/// Counts the number of items in the set [begin, end). (i.e. index[begin] - index[end])
 	internal borrowing func countEntries(begin:UnsafePointer<MDB_val>, end:UnsafePointer<MDB_val>) throws -> Int {
 		guard compareEntryKeys(begin.pointee, end.pointee) != 0 else {
 			return 0
@@ -42,6 +44,7 @@ extension MDB_cursor_basic {
 }
 
 extension MDB_cursor_strict where Self.MDB_cursor_dbtype.MDB_db_key_type:DatabaseIndexVector {
+	/// Counts the number of items in the set [begin, opLast]
 	internal borrowing func countEntries(begin:UnsafePointer<MDB_val>) throws -> Int {
 		var count = 0
 		do {
@@ -55,6 +58,7 @@ extension MDB_cursor_strict where Self.MDB_cursor_dbtype.MDB_db_key_type:Databas
 			return count
 		}
 	}
+	/// Counts the number of items in the set [begin, end). (i.e. index[begin] - index[end])
 	internal borrowing func countEntries(begin:UnsafePointer<MDB_val>, end:UnsafePointer<MDB_val>) throws -> Int {
 		guard MDB_cursor_dbtype.MDB_db_key_type.MDB_compare_f(begin, end) != 0 else {
 			return 0

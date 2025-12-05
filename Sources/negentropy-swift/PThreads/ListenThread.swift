@@ -7,6 +7,12 @@ import Logging
 import wireguard_userspace_nio
 
 extension NegentropyDatabaseStrict {
+	/// The primary listen function used in the sync pthread.
+	/// The function reads incoming Negentropy packets and strips the Negentropy header for the type of packet.
+	/// - `.responder`: Reconciles the packet's data content and sends the corresponding response to the sync thread.
+	/// - `.dataQuery`: Finds the corresponding value for the data query key and sends it to the sync thread.
+	/// - `.data`: Adds the data's key and value to the database. Does not send a response to the sync thread.
+	/// - `.finish`: Breaks the receive loop.
 	fileprivate func listen(channel:Channel, fifo:FIFO<ByteBuffer, Swift.Error>, publicKey:PublicKey, buckets:Int, tx:borrowing Transaction, cliLogger:Logger) throws {
 		var buffer = ByteBufferAllocator().buffer(capacity: MemoryLayout<MDB_db_key_type>.size)
 				
@@ -37,7 +43,7 @@ extension NegentropyDatabaseStrict {
 						try WGInterface<KCPChannels>.write(channel: channel, publicKey: publicKey, data: newMsg)
 					case .dataQuery:
 						let key = try verifiedData.withUnsafeReadableBytes { ptr in
-							guard ptr.count >= MemoryLayout<MDB_db_key_type>.size else { throw NegentropyError.undecodableIdentifier }
+							guard ptr.count >= MemoryLayout<MDB_db_key_type>.size else { throw NegentropyError.undecodableMDBKey }
 							return MDB_db_key_type(RAW_staticbuff: ptr.baseAddress!)
 						}
 						
@@ -51,7 +57,7 @@ extension NegentropyDatabaseStrict {
 						buffer.clear(minimumCapacity: MemoryLayout<MDB_db_key_type>.size)
 					case .data:
 						let key = try verifiedData.withUnsafeReadableBytes { ptr in
-							guard ptr.count >= MemoryLayout<MDB_db_key_type>.size else { throw NegentropyError.undecodableIdentifier }
+							guard ptr.count >= MemoryLayout<MDB_db_key_type>.size else { throw NegentropyError.undecodableMDBKey }
 							return MDB_db_key_type(RAW_staticbuff: ptr.baseAddress!)
 						}
 						var valueSlice = verifiedData
@@ -62,7 +68,7 @@ extension NegentropyDatabaseStrict {
 
 						let value = try valueBuffer.withUnsafeReadableBytes { ptr -> MDB_db_val_type in
 							guard let ret = MDB_db_val_type(RAW_decode: UnsafeRawPointer(ptr.baseAddress!), count: ptr.count) else {
-								throw NegentropyError.undecodableValue
+								throw NegentropyError.undecodableMDBValue
 							}
 							return ret
 						}
@@ -80,6 +86,7 @@ extension NegentropyDatabaseStrict {
 }
 
 extension NegentropyDatabase {
+	/// See NegentropyDatabaseStrict.listen()
 	fileprivate func listen(channel:Channel, fifo:FIFO<ByteBuffer, Swift.Error>, publicKey:PublicKey, buckets:Int, tx:borrowing Transaction, cliLogger:Logger) throws {
 		var buffer = ByteBufferAllocator().buffer(capacity: 0)
 				
@@ -166,6 +173,10 @@ public struct NegentropyListenThread:PThreadWork {
 		self.dbSignatures = env.5
 		self.buckets = 20
 	}
+	/// Receives the database signatures from the sync thread and stores the corresponding databases.
+	/// All databases must be in the same environment.
+	/// The listener thread databases MUST contain the sync threads databases.
+	/// individually listen on all databases until syncing is complete.
 	public func pthreadWork() throws -> Void {
 		guard mdbStrictArray.count + mdbBasicArray.count > 0 else { throw NegentropyError.noDatabases }
 		

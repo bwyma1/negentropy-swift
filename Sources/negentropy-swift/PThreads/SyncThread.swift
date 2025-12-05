@@ -7,6 +7,10 @@ import Logging
 import wireguard_userspace_nio
 
 extension NegentropyDatabaseStrict {
+	/// The primary sync function used in the sync pthread.
+	/// The function reads incoming Negentropy packets and strips the Negentropy header for the type of packet.
+	/// - `.initiator`: Reconciles the packet's data content. If the returned message is nil, then start to sync the data. If it's not nil. the send the message to the listener.
+	/// - `.data`: Adds the data's key and value to the database. Does not send a response to the sync thread.
 	fileprivate func sync(channel:Channel, fifo:FIFO<ByteBuffer, Swift.Error>, publicKey:PublicKey, buckets:Int, tx:borrowing Transaction, cliLogger:Logger, oneWaySync:Bool) throws {
 		var buffer = ByteBufferAllocator().buffer(capacity: MemoryLayout<MDB_db_key_type>.size)
 		
@@ -86,7 +90,7 @@ extension NegentropyDatabaseStrict {
 						}
 					case .data:
 						let key = try verifiedData.withUnsafeReadableBytes { ptr in
-							guard ptr.count >= MemoryLayout<MDB_db_key_type>.size else { throw NegentropyError.undecodableIdentifier }
+							guard ptr.count >= MemoryLayout<MDB_db_key_type>.size else { throw NegentropyError.undecodableMDBKey }
 							return MDB_db_key_type(RAW_staticbuff: ptr.baseAddress!)
 						}
 						var valueSlice = verifiedData
@@ -97,7 +101,7 @@ extension NegentropyDatabaseStrict {
 
 						let value = try valueBuffer.withUnsafeReadableBytes { ptr -> MDB_db_val_type in
 							guard let ret = MDB_db_val_type(RAW_decode: UnsafeRawPointer(ptr.baseAddress!), count: ptr.count) else {
-								throw NegentropyError.undecodableValue
+								throw NegentropyError.undecodableMDBValue
 							}
 							return ret
 						}
@@ -114,6 +118,7 @@ extension NegentropyDatabaseStrict {
 }
 
 extension NegentropyDatabase {
+	/// See NegentropyDatabaseStrict.sync()
 	fileprivate func sync(channel:Channel, fifo:FIFO<ByteBuffer, Swift.Error>, publicKey:PublicKey, buckets:Int, tx:borrowing Transaction, cliLogger:Logger, oneWaySync:Bool) throws {
 		var buffer = ByteBufferAllocator().buffer(capacity: 0)
 		
@@ -239,6 +244,10 @@ public struct NegentropySyncThread:PThreadWork {
 		
 		self.buckets = 20
 	}
+	/// Sends the database signatures of all databases awaiting a sync to the listener.
+	/// All databases must be in the same environment.
+	/// The sync thread databases MUST be a subset of the listener thread databases.
+	/// individually sync on all databases until syncing is complete.
 	public func pthreadWork() throws -> Void {
 		guard mdbStrictArray.count + mdbBasicArray.count > 0 else { throw NegentropyError.noDatabases }
 		
