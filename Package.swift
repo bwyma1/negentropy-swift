@@ -12,12 +12,11 @@ let package = Package(
             targets: ["negentropy-swift"]),
     ],
 	dependencies:[
-		.package(url:"https://github.com/tannerdsilva/rawdog", revision:"ba588bc9e3b824c8e0e1d7868a3b7cf9dd876b81"),
-		.package(url:"https://github.com/tannerdsilva/wireguard-swift", revision:"082c17b60c4a31b13fb0c36bba921953f47ae22f"),
-//		.package(url:"https://github.com/tannerdsilva/QuickLMDB.git", "14.0.0"..<"15.0.0"),
-		.package(name:"QuickLMDB", path:"../QuickLMDB"),
-		.package(url:"https://github.com/tannerdsilva/bedrock.git", "7.1.0"..<"8.0.0"),
-		.package(url:"http://github.com/apple/swift-nio.git", "2.84.0"..<"3.0.0"),
+		.package(url:"https://github.com/tannerdsilva/rawdog.git", "22.0.0"..<"23.0.0"),
+		.package(path:"../QuickLMDB"),
+		.package(path:"../wireguard-swift"),
+		.package(url:"https://github.com/tannerdsilva/bedrock.git", branch:"v22-rewrite"),
+		.package(url:"https://github.com/apple/swift-nio.git", "2.81.0"..<"3.0.0"),
 		.package(url:"https://github.com/apple/swift-log.git", "1.6.4"..<"2.0.0"),
 	],
     targets: [

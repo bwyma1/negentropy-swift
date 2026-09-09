@@ -38,7 +38,7 @@ extension NegentropyDatabaseStrict {
 				}
 				var type = MessageType.finish
 				let verifiedData = try incomingData.withUnsafeReadableBytes { ptr in
-				   guard let negData = NegentropyData(RAW_decode: ptr.baseAddress!, count: ptr.count) else {
+				   guard let negData = NegentropyData(RAW_decode: ptr) else {
 					   throw NegentropyError.expectedNegentropyData
 				   }
 				   type = negData.type
@@ -65,11 +65,11 @@ extension NegentropyDatabaseStrict {
 							// Send all of the data for the ID's we have
 							if(oneWaySync == false) {
 								for key in allHave {
-									_ = key.RAW_access { ptr in
+									_ = key.RAW_access_immutable(UnsafeBufferPointer<UInt8>.self) { ptr in
 										buffer.writeBytes(ptr)
 									}
 									let value = try loadEntry(key: key, tx: tx)
-									_ = value.RAW_access { ptr in
+									_ = value.RAW_access_immutable(UnsafeBufferPointer<UInt8>.self) { ptr in
 										buffer.writeBytes(ptr)
 									}
 									encodeNegentropyHeader(into: &buffer, type: .data)
@@ -80,7 +80,7 @@ extension NegentropyDatabaseStrict {
 							// Send data query messages for the ID's we need
 							breakCount = allNeed.count
 							for key in allNeed {
-								_ = key.RAW_access { ptr in
+								_ = key.RAW_access_immutable(UnsafeBufferPointer<UInt8>.self) { ptr in
 									buffer.writeBytes(ptr)
 								}
 								encodeNegentropyHeader(into: &buffer, type: .dataQuery)
@@ -91,7 +91,7 @@ extension NegentropyDatabaseStrict {
 					case .data:
 						let key = try verifiedData.withUnsafeReadableBytes { ptr in
 							guard ptr.count >= MemoryLayout<MDB_db_key_type>.size else { throw NegentropyError.undecodableMDBKey }
-							return MDB_db_key_type(RAW_staticbuff: ptr.baseAddress!)
+							return MDB_db_key_type.fromBindingBytes(ptr)
 						}
 						var valueSlice = verifiedData
 						valueSlice.moveReaderIndex(forwardBy: MemoryLayout<MDB_db_key_type>.size)
@@ -100,7 +100,7 @@ extension NegentropyDatabaseStrict {
 						valueBuffer.writeBuffer(&valueSlice)
 
 						let value = try valueBuffer.withUnsafeReadableBytes { ptr -> MDB_db_val_type in
-							guard let ret = MDB_db_val_type(RAW_decode: UnsafeRawPointer(ptr.baseAddress!), count: ptr.count) else {
+							guard let ret = MDB_db_val_type(RAW_decode: ptr) else {
 								throw NegentropyError.undecodableMDBValue
 							}
 							return ret
@@ -146,7 +146,7 @@ extension NegentropyDatabase {
 				}
 				var type = MessageType.finish
 				var verifiedData = try incomingData.withUnsafeReadableBytes { ptr in
-				   guard let negData = NegentropyData(RAW_decode: ptr.baseAddress!, count: ptr.count) else {
+				   guard let negData = NegentropyData(RAW_decode: ptr) else {
 					   throw NegentropyError.expectedNegentropyData
 				   }
 				   type = negData.type

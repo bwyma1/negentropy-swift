@@ -83,10 +83,14 @@ extension NegentropySwiftTests {
 			try aliceDB.deleteAllEntries(tx:newTrans)
 			
 			try aliceDB.cursor(tx:newTrans) { cursor in
-				let key1:TestingID = try generateSecureRandomBytes(as: TestingID.self)
-				let key2:TestingID = try generateSecureRandomBytes(as: TestingID.self)
-				let val1:TestingID = try generateSecureRandomBytes(as: TestingID.self)
-				let val2:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+				let key1Bytes = try generateSecureRandomBytes(count: 8)
+				let key1:TestingID = try TestingID(RAW_decode: key1Bytes.withUnsafeBytes { $0 })!
+				let key2Bytes = try generateSecureRandomBytes(count: 8)
+				let key2:TestingID = try TestingID(RAW_decode: key2Bytes.withUnsafeBytes { $0 })!
+				let val1Bytes = try generateSecureRandomBytes(count: 8)
+				let val1:TestingID = try TestingID(RAW_decode: val1Bytes.withUnsafeBytes { $0 })!
+				let val2Bytes = try generateSecureRandomBytes(count: 8)
+				let val2:TestingID = try TestingID(RAW_decode: val2Bytes.withUnsafeBytes { $0 })!
 				try cursor.setEntry(key:key1, value:val1, flags:[])
 				try cursor.setEntry(key:key1, value:val2, flags:[])
 			}
@@ -152,7 +156,8 @@ extension NegentropySwiftTests {
 			
 			try aliceDB.cursor(tx:newTrans) { cursor in
 				for i in 0..<aliceDBSize {
-					let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+					let rawBytes = try generateSecureRandomBytes(count: 8)
+					let id:TestingID = try TestingID(RAW_decode: rawBytes.withUnsafeBytes { $0 })!
 					logID(id: id)
 					try cursor.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
 				}
@@ -203,7 +208,8 @@ extension NegentropySwiftTests {
 			
 			try bobDB.cursor(tx:newTrans) { cursor in
 				for i in 0..<bobDBSize {
-					let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+					let rawBytes = try generateSecureRandomBytes(count: 8)
+					let id:TestingID = try TestingID(RAW_decode: rawBytes.withUnsafeBytes { $0 })!
 					logID(id: id)
 					try cursor.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
 				}
@@ -253,7 +259,8 @@ extension NegentropySwiftTests {
 				try aliceDB.cursor(tx:newTrans2) { cursor2 in
 					for i in 0..<dbSize {
 						// Make key
-						let id:TestingID = try generateSecureRandomBytes(as: TestingID.self)
+						let rawBytes = try generateSecureRandomBytes(count: 8)
+						let id:TestingID = try TestingID(RAW_decode: rawBytes.withUnsafeBytes { $0 })!
 						logID(id: id)
 						try cursor1.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])
 						try cursor2.setEntry(key:id, value:Data(RAW_native: UInt64(i)), flags:[])

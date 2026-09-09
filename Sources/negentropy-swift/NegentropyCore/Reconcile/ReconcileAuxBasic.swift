@@ -56,7 +56,7 @@ extension NegentropyDatabase {
 					guard let fingerprintBytes = queryBuffer.readBytes(length:MemoryLayout<Fingerprint>.size) else {
 						throw InternalFatalError()
 					}
-					let theirFingerprint = Fingerprint(RAW_staticbuff:fingerprintBytes)
+					let theirFingerprint = fingerprintBytes.withUnsafeBytes { Fingerprint(RAW_decode:$0)! }
 					let ourFingerprint = try cursor.fingerprint(begin:&lower, end:&upper)
 					if theirFingerprint != ourFingerprint {
 						doSkip(&skip, prevBound, returnBuffer: &returnBuffer)
@@ -153,8 +153,8 @@ extension NegentropyDatabase {
 					guard let fingerprintBytes = queryBuffer.readBytes(length:MemoryLayout<Fingerprint>.size) else {
 						throw InternalFatalError()
 					}
-					let theirFingerprint = Fingerprint(RAW_staticbuff:fingerprintBytes)
-					let ourFingerprint = Fingerprint(RAW_staticbuff: Fingerprint.RAW_staticbuff_zeroed())
+					let theirFingerprint = fingerprintBytes.withUnsafeBytes { Fingerprint(RAW_decode:$0)! }
+					let ourFingerprint = zeroedFingerprint()
 					if theirFingerprint != ourFingerprint {
 						doSkip(&skip, prevBound, returnBuffer: &returnBuffer)
 						splitRangeZeroDB(returnBuffer: &returnBuffer, upperBound: curBound)

@@ -6,19 +6,19 @@ import QuickLMDB
 internal func write<K>(bound:borrowing Bound<K>, writeBuffer:inout ByteBuffer) where K:DatabaseIndexVector {
 	let expectedSize = bound.length
 	writeBuffer.writeInteger(UInt8(expectedSize), as:UInt8.self)
-	bound.identifier.RAW_access { ptr in
+	bound.identifier.RAW_access_immutable(UnsafeBufferPointer<UInt8>.self) { ptr in
 		_ = writeBuffer.writeBytes(ptr.prefix(Int(expectedSize)))
 	}
 }
 /// Encodes a `Fingerprint` into the writeBuffer
 internal func write(fingerprint:Fingerprint, writeBuffer:inout ByteBuffer) {
-	fingerprint.RAW_access { fingerprint in
+	fingerprint.RAW_access_immutable(UnsafeBufferPointer<UInt8>.self) { fingerprint in
 		_ = writeBuffer.writeBytes(fingerprint)
 	}
 }
 /// Encodes a `type DatabaseIndexVector` into the writeBuffer
 internal func write<I>(identifier:I, writeBuffer:inout ByteBuffer) where I:DatabaseIndexVector {
-	identifier.RAW_access { key in
+	identifier.RAW_access_immutable(UnsafeBufferPointer<UInt8>.self) { key in
 		_ = writeBuffer.writeBytes(key)
 	}
 }

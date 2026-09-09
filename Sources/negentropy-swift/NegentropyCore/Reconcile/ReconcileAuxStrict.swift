@@ -33,7 +33,7 @@ extension NegentropyDatabaseStrict {
 		guard buckets > 0 else {
 			fatalError("fatal developer usage error in \(#function) - `buckets` must be greater than 0 - \(#file):\(#line)")
 		}
-		var prevBound = Bound(length:RAW_byte(RAW_native:UInt8(MemoryLayout<MDB_db_key_type>.size)).RAW_native(), identifier:MDB_db_key_type(RAW_staticbuff: MDB_db_key_type.RAW_staticbuff_zeroed()))
+		var prevBound = Bound(length:RAW_byte(RAW_native:UInt8(MemoryLayout<MDB_db_key_type>.size)).RAW_native(), identifier:MDB_db_key_type.RAW_comparable_fixed_theoretical_min())
 		var prevIndex = try cursor.opFirst(returning:(key:MDB_val, value:MDB_val).self).key
 		var skip:Bool = false
 		while queryBuffer.readableBytes > 0 {
@@ -42,7 +42,7 @@ extension NegentropyDatabaseStrict {
 			guard let readBytes = queryBuffer.readBytes(length:Int(dataLength)) else {
 				throw InternalFatalError()
 			}
-			let curBound = Bound<MDB_db_key_type>(length:RAW_byte(RAW_native:dataLength).RAW_native(), identifier:MDB_db_key_type(RAW_staticbuff:readBytes))
+			let curBound = Bound<MDB_db_key_type>(length:RAW_byte(RAW_native:dataLength).RAW_native(), identifier:readBytes.withUnsafeBytes { MDB_db_key_type.fromBindingBytes($0) })
 			guard let modeByte = queryBuffer.readInteger(as:UInt8.self), let mode = Mode(rawValue:modeByte) else {
 				throw InternalFatalError()
 			}
@@ -60,7 +60,7 @@ extension NegentropyDatabaseStrict {
 						guard let fingerprintBytes = queryBuffer.readBytes(length:MemoryLayout<Fingerprint>.size) else {
 							throw InternalFatalError()
 						}
-						let theirFingerprint = Fingerprint(RAW_staticbuff:fingerprintBytes)
+						let theirFingerprint = fingerprintBytes.withUnsafeBytes { Fingerprint(RAW_decode:$0)! }
 						let ourFingerprint = try cursor.fingerprint(begin:&lower, end:&upper)
 						if theirFingerprint != ourFingerprint {
 							doSkip(&skip, prevBound, returnBuffer: &returnBuffer)
@@ -77,7 +77,7 @@ extension NegentropyDatabaseStrict {
 							guard let idBytes = queryBuffer.readBytes(length:MemoryLayout<MDB_db_key_type>.size) else {
 								throw InternalFatalError()
 							}
-							let id = MDB_db_key_type(RAW_staticbuff:idBytes)
+							let id = idBytes.withUnsafeBytes { MDB_db_key_type.fromBindingBytes($0) }
 							if isInitiator {
 								theirIDs.insert(id)
 							}
@@ -86,7 +86,7 @@ extension NegentropyDatabaseStrict {
 						if isInitiator {
 							skip = true
 							try cursor.iterate(begin:&lower, end:&upper) { id in
-								let key = MDB_db_key_type(RAW_staticbuff:id.pointee.mv_data)
+								let key = MDB_db_key_type.fromBindingBytes(UnsafeRawBufferPointer(start:id.pointee.mv_data, count:MemoryLayout<MDB_db_key_type>.size))
 								if theirIDs.contains(key) {
 									theirIDs.remove(key)
 								} else {
@@ -125,7 +125,7 @@ extension NegentropyDatabaseStrict {
 		guard buckets > 0 else {
 			fatalError("fatal developer usage error in \(#function) - `buckets` must be greater than 0 - \(#file):\(#line)")
 		}
-		var prevBound = Bound(length:RAW_byte(RAW_native:UInt8(MemoryLayout<MDB_db_key_type>.size)).RAW_native(), identifier:MDB_db_key_type(RAW_staticbuff: MDB_db_key_type.RAW_staticbuff_zeroed()))
+		var prevBound = Bound(length:RAW_byte(RAW_native:UInt8(MemoryLayout<MDB_db_key_type>.size)).RAW_native(), identifier:MDB_db_key_type.RAW_comparable_fixed_theoretical_min())
 		var skip:Bool = false
 		while queryBuffer.readableBytes > 0 {
 			
@@ -133,7 +133,7 @@ extension NegentropyDatabaseStrict {
 			guard let readBytes = queryBuffer.readBytes(length:Int(dataLength)) else {
 				throw InternalFatalError()
 			}
-			let curBound = Bound<MDB_db_key_type>(length:RAW_byte(RAW_native:dataLength).RAW_native(), identifier:MDB_db_key_type(RAW_staticbuff:readBytes))
+			let curBound = Bound<MDB_db_key_type>(length:RAW_byte(RAW_native:dataLength).RAW_native(), identifier:readBytes.withUnsafeBytes { MDB_db_key_type.fromBindingBytes($0) })
 			guard let modeByte = queryBuffer.readInteger(as:UInt8.self), let mode = Mode(rawValue:modeByte) else {
 				throw InternalFatalError()
 			}
@@ -145,8 +145,8 @@ extension NegentropyDatabaseStrict {
 					guard let fingerprintBytes = queryBuffer.readBytes(length:MemoryLayout<Fingerprint>.size) else {
 						throw InternalFatalError()
 					}
-					let theirFingerprint = Fingerprint(RAW_staticbuff:fingerprintBytes)
-					let ourFingerprint = Fingerprint(RAW_staticbuff: Fingerprint.RAW_staticbuff_zeroed())
+					let theirFingerprint = fingerprintBytes.withUnsafeBytes { Fingerprint(RAW_decode:$0)! }
+					let ourFingerprint = zeroedFingerprint()
 					if theirFingerprint != ourFingerprint {
 						doSkip(&skip, prevBound, returnBuffer: &returnBuffer)
 						splitRangeZeroDB(returnBuffer: &returnBuffer, upperBound: curBound)
@@ -162,7 +162,7 @@ extension NegentropyDatabaseStrict {
 						guard let idBytes = queryBuffer.readBytes(length:MemoryLayout<MDB_db_key_type>.size) else {
 							throw InternalFatalError()
 						}
-						let id = MDB_db_key_type(RAW_staticbuff:idBytes)
+						let id = idBytes.withUnsafeBytes { MDB_db_key_type.fromBindingBytes($0) }
 						if isInitiator {
 							theirIDs.insert(id)
 						}
@@ -199,7 +199,7 @@ extension NegentropyDatabaseStrict{
 		func getMinimalBound(prev:MDB_val, cur:MDB_val) -> Bound<MDB_db_key_type> {
 			var sharedPrefixBytes:UInt8 = 0
 			var returnKey = MDB_db_key_type.RAW_comparable_fixed_theoretical_min()
-			returnKey.RAW_access_mutating { retKey in
+			returnKey.RAW_access_mutable(UnsafeMutableBufferPointer<UInt8>.self) { retKey in
 				copyLoop: for i in 0..<min(cur.mv_size, prev.mv_size) {
 					retKey[i] = cur.mv_data.assumingMemoryBound(to:UInt8.self)[i]
 					sharedPrefixBytes += 1

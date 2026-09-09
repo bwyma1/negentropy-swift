@@ -22,29 +22,22 @@ internal struct NegentropyData {
 
 // MARK: RAW_decodable
 extension NegentropyData:RAW_decodable {
-	init?(RAW_decode inputPtr:UnsafeRawPointer, count:RAW.size_t) {
-		var seekPtr = inputPtr
+	init?(RAW_decode buffer:UnsafeRawBufferPointer) {
+		let headerSize = MemoryLayout<NegentropyMagicNumber>.size + 1
+		guard buffer.count >= headerSize else { return nil }
+		var seekPtr = buffer.baseAddress!
 		// read the magic number
-		guard count >= MemoryLayout<NegentropyMagicNumber>.size else {
-			return nil
-		}
 		self.magicNumber = NegentropyMagicNumber(RAW_staticbuff_seeking:&seekPtr)
 		// read the type
-		guard count >= MemoryLayout<NegentropyMagicNumber>.size + 1 else { return nil }
 		guard let validType = MessageType(rawValue:seekPtr.assumingMemoryBound(to:UInt8.self).pointee) else {
 			return nil
 		}
 		self.type = validType
-		seekPtr = seekPtr + 1
-		// read any remaining data (assuming a fatal state if the count is invalid)
-		let remainingCount = count - MemoryLayout<NegentropyMagicNumber>.size - 1
-		guard remainingCount >= 0 else { fatalError("critical internal error \(#file):\(#line)") }
-		// Decode the remaining count into a byteBuffer
+		// remaining bytes become the negentropy payload
+		let remainingCount = buffer.count - headerSize
 		var decodedData = ByteBufferAllocator().buffer(capacity: remainingCount)
 		if remainingCount > 0 {
-			decodedData.writeBytes(
-				UnsafeRawBufferPointer(start: seekPtr, count: remainingCount)
-			)
+			decodedData.writeBytes(UnsafeRawBufferPointer(start: seekPtr + 1, count: remainingCount))
 		}
 		self.data = decodedData
 	}
@@ -55,7 +48,7 @@ extension NegentropyData {
 	// encode header onto existing bytebuffer
 	mutating func encode() -> ByteBuffer {
 		var headerData = ByteBufferAllocator().buffer(capacity: 5 + data.readableBytes)
-		_ = magicNumber.RAW_access { ptr in
+		_ = magicNumber.RAW_access_immutable(UnsafeBufferPointer<UInt8>.self) { ptr in
 			headerData.writeBytes(ptr)
 		}
 		headerData.writeBytes([type.rawValue])
