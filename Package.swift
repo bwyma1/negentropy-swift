@@ -1,5 +1,4 @@
 // swift-tools-version: 6.2
-// The swift-tools-version declares the minimum version of Swift required to build this package.
 import PackageDescription
 
 let package = Package(
@@ -8,23 +7,19 @@ let package = Package(
 		.macOS(.v15)
 	],
     products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
             name: "negentropy-swift",
             targets: ["negentropy-swift"]),
     ],
 	dependencies:[
-		.package(url:"https://github.com/tannerdsilva/rawdog", revision:"ba588bc9e3b824c8e0e1d7868a3b7cf9dd876b81"),
-		.package(url:"https://github.com/tannerdsilva/wireguard-swift", revision:"e27b8dc8e80b8157d6bb31cf107e858ff90a484e"),
-//		.package(url:"https://github.com/tannerdsilva/QuickLMDB.git", "14.0.0"..<"14.1.0"),
-		.package(name:"QuickLMDB", path:"../QuickLMDB"),
-		.package(url:"https://github.com/tannerdsilva/bedrock.git", "7.1.0"..<"8.0.0"),
-		.package(url:"http://github.com/apple/swift-nio.git", "2.84.0"..<"3.0.0"),
+		.package(url:"https://github.com/tannerdsilva/rawdog.git", "22.0.0"..<"23.0.0"),
+		.package(path:"../QuickLMDB"),
+		.package(path:"../wireguard-swift"),
+		.package(url:"https://github.com/tannerdsilva/bedrock.git", branch:"v22-rewrite"),
+		.package(url:"https://github.com/apple/swift-nio.git", "2.81.0"..<"3.0.0"),
 		.package(url:"https://github.com/apple/swift-log.git", "1.6.4"..<"2.0.0"),
 	],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "negentropy-swift",
 			dependencies: [

@@ -4,7 +4,7 @@ import RAW
 internal struct NegentropyMagicNumber:Sendable {
 	init() {
 		let magicBytes = Array("NEGT".utf8)
-		self = Self(RAW_staticbuff:magicBytes)
+		self = Self(RAW_decode: magicBytes.withUnsafeBytes { $0 })!
 	}
 }
 
