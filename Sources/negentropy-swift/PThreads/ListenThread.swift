@@ -117,6 +117,9 @@ extension NegentropyDatabase {
 						try WGInterface<KCPChannels>.write(channel: channel, publicKey: publicKey, data: newMsg)
 					case .dataQuery:
 						try verifiedData.withUnsafeMutableReadableBytes { ptr in
+							guard ptr.count > 0 else {
+								throw InternalFatalError()
+							}
 							let key = MDB_val(mv_size: ptr.count, mv_data: ptr.baseAddress!)
 							write(val: key, writeBuffer: &buffer)
 							let value = try loadEntry(key: key, tx: tx)
@@ -126,7 +129,9 @@ extension NegentropyDatabase {
 							buffer.clear(minimumCapacity: 0)
 						}
 					case .data:
-						let keyLength = verifiedData.readInteger(as:UInt8.self)!
+						guard let keyLength = verifiedData.readInteger(as:UInt8.self) else {
+							throw InternalFatalError()
+						}
 						guard var keyBytes = verifiedData.readBytes(length:Int(keyLength)) else {
 							throw InternalFatalError()
 						}

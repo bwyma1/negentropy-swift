@@ -197,7 +197,9 @@ extension NegentropyDatabase {
 							}
 						}
 					case .data:
-						let keyLength = verifiedData.readInteger(as:UInt8.self)!
+						guard let keyLength = verifiedData.readInteger(as:UInt8.self) else {
+							throw InternalFatalError()
+						}
 						guard var keyBytes = verifiedData.readBytes(length:Int(keyLength)) else {
 							throw InternalFatalError()
 						}

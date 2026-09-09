@@ -70,7 +70,9 @@ extension NegentropyDatabase {
 					}
 					var theirIDs = Set<ByteBuffer>()
 					for _ in 0..<numIDs {
-						let idLength = queryBuffer.readInteger(as:UInt8.self)!
+						guard let idLength = queryBuffer.readInteger(as:UInt8.self) else {
+							throw InternalFatalError()
+						}
 						guard let idBuffer = queryBuffer.readSlice(length:Int(idLength)) else {
 							throw InternalFatalError()
 						}
@@ -167,7 +169,9 @@ extension NegentropyDatabase {
 					}
 					var theirIDs = Set<ByteBuffer>()
 					for _ in 0..<numIDs {
-						let idLength = queryBuffer.readInteger(as:UInt8.self)!
+						guard let idLength = queryBuffer.readInteger(as:UInt8.self) else {
+							throw InternalFatalError()
+						}
 						guard let idBuffer = queryBuffer.readSlice(length:Int(idLength)) else {
 							throw InternalFatalError()
 						}
