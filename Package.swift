@@ -13,7 +13,7 @@ let package = Package(
     ],
 	dependencies:[
 		.package(url:"https://github.com/tannerdsilva/rawdog.git", "22.0.0"..<"23.0.0"),
-		.package(path:"../QuickLMDB"),
+		.package(url:"https://github.com/tannerdsilva/QuickLMDB", branch:"rawdog-v22-bump"),
 //		.package(path:"../wireguard-swift"),
 		.package(url:"https://github.com/tannerdsilva/wireguard-swift", branch:"master"),
 		.package(url:"https://github.com/tannerdsilva/bedrock.git", branch:"v22-rewrite"),
