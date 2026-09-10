@@ -14,7 +14,8 @@ let package = Package(
 	dependencies:[
 		.package(url:"https://github.com/tannerdsilva/rawdog.git", "22.0.0"..<"23.0.0"),
 		.package(path:"../QuickLMDB"),
-		.package(path:"../wireguard-swift"),
+//		.package(path:"../wireguard-swift"),
+		.package(url:"https://github.com/tannerdsilva/wireguard-swift", branch:"master"),
 		.package(url:"https://github.com/tannerdsilva/bedrock.git", branch:"v22-rewrite"),
 		.package(url:"https://github.com/apple/swift-nio.git", "2.81.0"..<"3.0.0"),
 		.package(url:"https://github.com/apple/swift-log.git", "1.6.4"..<"2.0.0"),

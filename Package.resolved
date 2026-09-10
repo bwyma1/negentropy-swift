@@ -1,5 +1,5 @@
 {
-  "originHash" : "ff036ac0bf0675925516af5117df0ae74efdc98515559be694e089f8ee47b15f",
+  "originHash" : "12ac91f1d908abe32e13ebcf64cd862ecd8471b31f0edee2f30c1e533eec37e5",
   "pins" : [
     {
       "identity" : "bedrock",
@@ -107,6 +107,15 @@
       "state" : {
         "revision" : "395a77f0aa927f0ff73941d7ac35f2b46d47c9db",
         "version" : "1.6.3"
+      }
+    },
+    {
+      "identity" : "wireguard-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tannerdsilva/wireguard-swift",
+      "state" : {
+        "branch" : "master",
+        "revision" : "b2dbd057996cfe0f96ab3307aa0ce0aab11f12ea"
       }
     }
   ],
